@@ -8,17 +8,15 @@ const summary = document.querySelector("#summary");
 const detail = document.querySelector("#detail");
 const resultsBody = document.querySelector("#results-body");
 const modeButtons = document.querySelectorAll("[data-mode]");
-const nocacheBox = document.querySelector("#nocache");
-const normaliseBox = document.querySelector("#normalise");
 const langButtons = document.querySelectorAll("[data-lang]");
+const MAX_PDFS = 30;
 
 const copy = {
   pl: {
     title: "PrzetarGO",
     tagline: "Odwołania KIO w danych",
     language: "Język",
-    heroTitle: "Odczytaj odwołanie z dokumentów",
-    heroText: "Dodaj pliki PDF jednej sprawy. Odwołanie, pełnomocnictwo i potwierdzenie przelewu mogą iść razem.",
+    heroTitle: "Konwertuj pliki PDF na JSON-y",
     processing: "Przetwarzanie",
     processingHint: "Wybierz sposób odczytu tej sprawy.",
     modeRegular: "Regularne",
@@ -27,11 +25,10 @@ const copy = {
     modeBielikHint: "Reguły, potem model",
     modeBielikOnly: "Tylko Bielik",
     modeBielikOnlyHint: "Bez reguł, same wywołania modelu",
-    noCache: "Bez pamięci podręcznej",
     documents: "Dokumenty",
-    dropAria: "Dodaj pliki PDF. Upuść je tutaj albo naciśnij Enter, aby je wskazać.",
-    dropTitle: "Upuść pliki PDF",
-    dropHint: "albo wskaż je na komputerze. Jeden lub więcej plików PDF.",
+    dropAria: "Dodaj do 30 plików PDF. Upuść je tutaj albo naciśnij Enter, aby wybrać je z urządzenia.",
+    dropTitle: "Upuść pliki PDF tutaj albo dodaj je ze swojego urządzenia.",
+    dropHint: "Do 30 plików PDF.",
     process: "Przetwórz dokumenty",
     summary: "Podsumowanie",
     summaryEmpty: "Kompletność i brakujące informacje pojawią się po przetworzeniu sprawy.",
@@ -46,8 +43,8 @@ const copy = {
     noCases: "Brak spraw.",
     processingNow: "Przetwarzanie…",
     apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom back-end2/start.sh.",
-    emptyFiles: "Ten plik ma 0 bajtów w oknie wyboru, więc nie ma w nim treści PDF. Pobierz pliki pod polem albo wybierz PDF, przy którym widać rozmiar.",
-    dropNote: "Możesz upuścić dowolny PDF z dysku. Plik w oknie wyboru musi mieć rozmiar większy niż zero.",
+    emptyFiles: "Ten plik ma 0 bajtów w oknie wyboru, więc nie ma w nim treści PDF. Wybierz PDF, przy którym widać rozmiar.",
+    tooMany: "Można dodać najwyżej 30 plików PDF.",
     uncertain: "Niepewne",
     filesTotal: "{count} plików · {size}",
     bielikNote: "Model Bielik nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
@@ -59,7 +56,6 @@ const copy = {
     sourceRule: "Reguły",
     sourceLlm: "Bielik",
     sourceAgree: "Reguły ✓ Bielik",
-    normalise: "Normalizuj JSON",
     timing: "{seconds} s · {average} s na plik",
     unrecognized: "Dokument nie został rozpoznany. Ekstraktor nie przypisał go do odwołania, pełnomocnictwa ani potwierdzenia przelewu.",
     copyJson: "Kopiuj JSON",
@@ -86,8 +82,7 @@ const copy = {
     title: "PrzetarGO",
     tagline: "KIO appeals as structured data",
     language: "Language",
-    heroTitle: "Read an appeal from its documents",
-    heroText: "Add the PDFs for one case. The appeal, power of attorney, and transfer confirmation can go in together.",
+    heroTitle: "Convert PDFs to JSONS",
     processing: "Processing",
     processingHint: "Choose how this case will be read.",
     modeRegular: "Regular",
@@ -96,11 +91,10 @@ const copy = {
     modeBielikHint: "Rules, then the model",
     modeBielikOnly: "Bielik only",
     modeBielikOnlyHint: "No rules, model calls only",
-    noCache: "No cache",
     documents: "Documents",
-    dropAria: "Add PDF files. Drop them here or press Enter to browse.",
-    dropTitle: "Drop PDFs here",
-    dropHint: "or browse files on this computer. One or more PDFs.",
+    dropAria: "Add up to 30 PDF files. Drop them here or press Enter to choose them from your device.",
+    dropTitle: "Drop PDFs here or add them from your device.",
+    dropHint: "Up to 30 PDFs.",
     process: "Process documents",
     summary: "Summary",
     summaryEmpty: "Completeness and missing information will show here after a case is processed.",
@@ -115,8 +109,8 @@ const copy = {
     noCases: "No cases yet.",
     processingNow: "Processing…",
     apiError: "The extractor did not respond. Refresh this page. If it still fails, run back-end2/start.sh.",
-    emptyFiles: "That file is 0 bytes in the file window, so it has no PDF content. Download the files under the box, or choose a PDF that shows a size.",
-    dropNote: "You can drop any PDF from your disk. In the file window it must show a size above zero.",
+    emptyFiles: "That file is 0 bytes in the file window, so it has no PDF content. Choose a PDF that shows a size.",
+    tooMany: "You can add up to 30 PDFs.",
     uncertain: "Uncertain",
     filesTotal: "{count} files · {size}",
     bielikNote: "Bielik is not connected. This run used the deterministic extractor.",
@@ -128,7 +122,6 @@ const copy = {
     sourceRule: "Rules",
     sourceLlm: "Bielik",
     sourceAgree: "Rules ✓ Bielik",
-    normalise: "Normalise JSON",
     timing: "{seconds} s · {average} s per file",
     unrecognized: "The document was not recognized. It was not classified as an appeal, a power of attorney, or a transfer confirmation.",
     copyJson: "Copy JSON",
@@ -161,7 +154,6 @@ const state = {
   nextId: 1,
   notice: null,
   busy: false,
-  normalise: true,
 };
 
 langButtons.forEach((button) => {
@@ -170,15 +162,6 @@ langButtons.forEach((button) => {
 
 modeButtons.forEach((button) => {
   button.addEventListener("click", () => selectMode(button.dataset.mode));
-});
-
-if (new URLSearchParams(location.search).get("nocache") === "1") {
-  nocacheBox.checked = true;
-}
-
-normaliseBox.addEventListener("change", () => {
-  state.normalise = normaliseBox.checked;
-  renderOutputs();
 });
 
 dropzone.addEventListener("click", (event) => {
@@ -299,8 +282,13 @@ async function addFiles(fileListLike) {
   const rejected = [];
   const empty = [];
   let added = 0;
+  let overflow = false;
 
   for (const file of incoming) {
+    if (state.files.length >= MAX_PDFS) {
+      overflow = true;
+      break;
+    }
     if (!(await isPdf(file))) {
       rejected.push(file.name);
       continue;
@@ -325,6 +313,8 @@ async function addFiles(fileListLike) {
     state.notice = { text: rejected.map((name) => `Rejected: ${name} – not a PDF`).join("\n") };
   } else if (empty.length > 0) {
     state.notice = { key: "emptyFiles", names: empty };
+  } else if (overflow) {
+    state.notice = { key: "tooMany" };
   } else if (added === 0) {
     state.notice = { key: "already" };
   } else {
@@ -383,7 +373,7 @@ function renderFiles() {
 
 async function submitFiles() {
   if (state.files.length === 0 || state.busy) return;
-  const selected = state.files.slice();
+  const selected = state.files.slice(0, MAX_PDFS);
   const mode = state.mode;
   state.busy = true;
   state.notice = null;
@@ -391,7 +381,6 @@ async function submitFiles() {
 
   const form = new FormData();
   form.append("mode", mode);
-  if (nocacheBox.checked) form.append("nocache", "1");
   selected.forEach((item) => form.append("files", item.file, item.file.name));
   try {
     const response = await fetch(`${apiBase()}/api/extract/batch`, { method: "POST", body: form });
@@ -470,7 +459,7 @@ function renderOutputs() {
   } else {
     latest.results
       .filter((item) => item.status !== "rejected")
-      .forEach((item, index) => detail.append(renderResult(item, index === 0)));
+      .forEach((item) => detail.append(renderResult(item)));
   }
 
   resultsBody.replaceChildren();
@@ -510,11 +499,10 @@ function typeLabel(documentType) {
   return t("types")[documentType] || t("types").unknown;
 }
 
-function renderResult(item, open) {
-  const article = document.createElement("details");
+function renderResult(item) {
+  const article = document.createElement("article");
   article.className = "result";
-  article.open = open;
-  const heading = document.createElement("summary");
+  const heading = document.createElement("h3");
   const sizeLabel = Number.isFinite(item.size) ? ` · ${formatSize(item.size)}` : "";
   heading.textContent = `${item.filename}${sizeLabel} — ${typeLabel(item.document_type)}`;
   if (item.status === "unrecognized" || item.status === "error") heading.append(uncertainMark());
@@ -544,7 +532,7 @@ function renderResult(item, open) {
   const raw = document.createElement("pre");
   raw.className = "json-view";
   raw.hidden = true;
-  const json = () => JSON.stringify(state.normalise ? item.result : (item.raw || item.result), null, 2);
+  const json = () => JSON.stringify(item.result, null, 2);
   raw.textContent = json();
   article.append(raw);
 

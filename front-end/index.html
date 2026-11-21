@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrzetarGO</title>
-    <link rel="stylesheet" href="styles.css?v=8" />
+    <link rel="stylesheet" href="styles.css?v=11" />
   </head>
   <body>
     <header class="site-header">
@@ -40,8 +40,7 @@
 
     <main class="page">
       <section class="intro">
-        <h1 data-i18n="heroTitle">Odczytaj odwołanie z dokumentów</h1>
-        <p data-i18n="heroText">Dodaj pliki PDF jednej sprawy. Odwołanie, pełnomocnictwo i potwierdzenie przelewu mogą iść razem.</p>
+        <h1 data-i18n="heroTitle">Konwertuj pliki PDF na JSON-y</h1>
       </section>
 
       <section class="mode-bar" aria-labelledby="mode-label">
@@ -49,7 +48,6 @@
           <h2 id="mode-label" data-i18n="processing">Przetwarzanie</h2>
           <p data-i18n="processingHint">Wybierz sposób odczytu tej sprawy.</p>
         </div>
-        <div class="mode-controls">
         <div class="segment" role="group" data-i18n-aria="processing">
           <button type="button" class="is-selected" data-mode="regular" aria-pressed="true">
             <span data-i18n="modeRegular">Regularne</span>
@@ -63,11 +61,6 @@
             <span data-i18n="modeBielikOnly">Tylko Bielik</span>
             <span data-i18n="modeBielikOnlyHint">Bez reguł, same wywołania modelu</span>
           </button>
-        </div>
-        <label class="cache-toggle">
-          <input id="nocache" type="checkbox">
-          <span data-i18n="noCache">Bez pamięci podręcznej</span>
-        </label>
         </div>
       </section>
 
@@ -89,10 +82,9 @@
                 <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M5 16.5V19a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5"/>
               </svg>
             </span>
-            <p class="drop-title" data-i18n="dropTitle">Upuść pliki PDF</p>
-            <p class="drop-hint" data-i18n="dropHint">albo wskaż je na komputerze. Jeden lub więcej plików PDF.</p>
+            <p class="drop-title" data-i18n="dropTitle">Upuść pliki PDF tutaj albo dodaj je ze swojego urządzenia.</p>
+            <p class="drop-hint" data-i18n="dropHint">Do 30 plików PDF.</p>
           </div>
-          <p class="drop-note" data-i18n="dropNote">Możesz upuścić dowolny PDF z dysku. Plik w oknie wyboru musi mieć rozmiar większy niż zero.</p>
           <input id="file-input" class="visually-hidden" type="file" accept="application/pdf,.pdf" multiple />
           <p id="input-message" class="message" role="status"></p>
           <ul id="file-list" class="file-list" hidden></ul>
@@ -114,10 +106,6 @@
           <article class="card">
             <header class="card-head">
               <h2 data-i18n="fields">Wyodrębnione pola</h2>
-            <label class="cache-toggle">
-              <input id="normalise" type="checkbox" checked>
-              <span data-i18n="normalise">Normalizuj JSON</span>
-            </label>
             </header>
             <div id="detail" class="panel-body">
               <p class="placeholder" data-i18n="fieldsEmpty">Sekcje i wartości pól każdego dokumentu pojawią się tutaj.</p>
@@ -155,6 +143,6 @@
     <footer class="site-footer">
       <p data-i18n="footer">Hacknation 2026 projekt dla Urzędu Zamówień Publicznych</p>
     </footer>
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=11"></script>
   </body>
 </html>

@@ -154,22 +154,6 @@ a {
   margin: 28px 0 20px;
 }
 
-.mode-controls {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.cache-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink);
-  font-size: 13px;
-  cursor: pointer;
-}
-
 .mode-bar h2,
 .card-head h2 {
   margin: 0;
@@ -435,15 +419,6 @@ a {
 
 .field-list .field-list {
   margin-left: 12px;
-}
-
-.result > summary {
-  cursor: pointer;
-  font-weight: 650;
-}
-
-.result > summary::-webkit-details-marker {
-  display: none;
 }
 
 .bielik-diff {
