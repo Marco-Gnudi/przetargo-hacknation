@@ -14,7 +14,7 @@ const MAX_PDFS = 30;
 const copy = {
   pl: {
     title: "PrzetarGO",
-    tagline: "Odwołania KIO w danych",
+    tagline: "Odwołania KIO jako ustrukturyzowane dane",
     language: "Język",
     heroTitle: "Konwertuj pliki PDF na JSON-y",
     processing: "Przetwarzanie",
@@ -32,6 +32,8 @@ const copy = {
     process: "Przetwórz dokumenty",
     summary: "Podsumowanie",
     summaryEmpty: "Kompletność i brakujące informacje pojawią się po przetworzeniu sprawy.",
+    complete: "Kompletny",
+    incomplete: "Niekompletny",
     fields: "Wyodrębnione pola",
     fieldsEmpty: "Sekcje i wartości pól każdego dokumentu pojawią się tutaj.",
     cases: "Sprawy",
@@ -98,6 +100,8 @@ const copy = {
     process: "Process documents",
     summary: "Summary",
     summaryEmpty: "Completeness and missing information will show here after a case is processed.",
+    complete: "Complete",
+    incomplete: "Incomplete",
     fields: "Extracted fields",
     fieldsEmpty: "Sections and field values for each document will show here.",
     cases: "Cases",
@@ -413,13 +417,12 @@ function renderOutputs() {
   if (!latest) {
     summary.append(placeholder("summaryEmpty"));
   } else {
-    const recognized = latest.results.filter((item) => item.status === "ok").length;
-    const unrecognized = latest.results.filter((item) => item.status === "unrecognized").length;
-    const failed = latest.results.filter((item) => item.status === "error").length;
-    const text = document.createElement("p");
-    text.className = "summary-text";
-    text.textContent = summarySentence(recognized, unrecognized, failed);
-    summary.append(text);
+    const list = document.createElement("div");
+    list.className = "summary-docs";
+    latest.results
+      .filter((item) => item.status !== "rejected")
+      .forEach((item) => list.append(renderSummaryDoc(item)));
+    summary.append(list);
     if (Number.isFinite(Number(latest.elapsed))) {
       const timing = document.createElement("p");
       timing.className = "summary-text";
@@ -488,11 +491,43 @@ function renderOutputs() {
   });
 }
 
-function summarySentence(recognized, unrecognized, failed) {
-  if (state.lang === "pl") {
-    return `Rozpoznane: ${recognized}. Nierozpoznane: ${unrecognized}. Błędy: ${failed}.`;
+function renderSummaryDoc(item) {
+  const block = document.createElement("div");
+  block.className = "summary-doc";
+  const title = document.createElement("p");
+  title.className = "summary-doc-title";
+  const name = document.createElement("span");
+  name.textContent = `${item.filename} — ${typeLabel(item.document_type)}`;
+  const status = document.createElement("span");
+  title.append(name, status);
+  block.append(title);
+
+  if (item.status !== "ok") {
+    status.className = "summary-status is-bad";
+    status.textContent = t("statuses")[item.status] || item.status;
+    return block;
   }
-  return `Recognized: ${recognized}. Unrecognized: ${unrecognized}. Errors: ${failed}.`;
+
+  const missing = Object.entries(flattenFields(item.result))
+    .filter(([, value]) => value === null)
+    .map(([path]) => path);
+  if (missing.length === 0) {
+    status.className = "summary-status is-ok";
+    status.textContent = t("complete");
+    return block;
+  }
+
+  status.className = "summary-status is-bad";
+  status.textContent = t("incomplete");
+  const bullets = document.createElement("ul");
+  bullets.className = "summary-missing";
+  missing.forEach((path) => {
+    const line = document.createElement("li");
+    line.textContent = path;
+    bullets.append(line);
+  });
+  block.append(bullets);
+  return block;
 }
 
 function typeLabel(documentType) {

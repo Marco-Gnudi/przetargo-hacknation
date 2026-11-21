@@ -391,6 +391,43 @@ a {
   margin: 0;
 }
 
+.summary-doc + .summary-doc {
+  margin-top: 12px;
+}
+
+.summary-doc-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0;
+  font-weight: 650;
+}
+
+.summary-status {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.summary-status.is-ok {
+  color: #1d6b3a;
+}
+
+.summary-status.is-bad {
+  color: var(--red);
+}
+
+.summary-missing {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.summary-missing li + li {
+  margin-top: 2px;
+}
+
 .file-block + .file-block {
   margin-top: 16px;
 }
