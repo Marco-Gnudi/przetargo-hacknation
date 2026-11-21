@@ -849,6 +849,7 @@ function renderOutputs() {
     pill.textContent = t("statuses")[item.status] || item.status;
     statusCell.append(pill);
     row.append(fileCell, typeCell, statusCell);
+    resultsBody.append(row);
   });
 }
 
