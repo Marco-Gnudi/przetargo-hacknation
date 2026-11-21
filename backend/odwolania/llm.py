@@ -11,7 +11,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AuthenticationError, NotFoundError, OpenAI, PermissionDeniedError
 
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 MAX_TEXT_CHARS = 12_000
@@ -29,9 +29,40 @@ RETRY_TEXT_CHARS = 8_000
 
 logger = logging.getLogger("odwolania.llm")
 
+
+class LLMAuthError(RuntimeError):
+    """The endpoint refused the key or the model. Retrying the next document will not help."""
+
 _RUN_USAGE: ContextVar[dict[str, int] | None] = ContextVar("llm_run_usage", default=None)
 _SKIP_CACHE: ContextVar[bool] = ContextVar("llm_skip_cache", default=False)
 _DOCUMENT: ContextVar[str] = ContextVar("llm_document", default="")
+_CREDENTIALS: ContextVar[dict[str, str] | None] = ContextVar("llm_credentials", default=None)
+_SETTINGS = ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL")
+
+
+def set_llm_credentials(api_key: str = "", base_url: str = "", model: str = "") -> None:
+    """Per-request settings sent by the browser. Empty values fall back to backend/.env."""
+    supplied = {
+        "LLM_API_KEY": (api_key or "").strip(),
+        "LLM_BASE_URL": (base_url or "").strip(),
+        "LLM_MODEL": (model or "").strip(),
+    }
+    _CREDENTIALS.set({name: value for name, value in supplied.items() if value} or None)
+
+
+def llm_setting(name: str) -> str:
+    load_env()
+    supplied = _CREDENTIALS.get() or {}
+    return supplied.get(name) or os.environ.get(name, "")
+
+
+def llm_configured() -> bool:
+    return all(llm_setting(name) for name in _SETTINGS)
+
+
+def server_key_configured() -> bool:
+    load_env()
+    return bool(os.environ.get("LLM_API_KEY"))
 
 
 def start_usage() -> None:
@@ -58,6 +89,11 @@ def set_skip_cache(enabled: bool) -> None:
 
 def cache_skipped() -> bool:
     return bool(_SKIP_CACHE.get())
+
+
+def hosted() -> bool:
+    """Public deployment: no shared disk caches, no input/output folders."""
+    return os.environ.get("PRZETARGO_HOSTED", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def set_llm_document(name: str) -> None:
@@ -94,21 +130,24 @@ class LLMClient:
             self.model = model or "test"
             return
 
-        load_env()
-        missing = [
-            name
-            for name in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL")
-            if not os.environ.get(name)
-        ]
+        missing = [name for name in _SETTINGS if not llm_setting(name)]
         if missing:
             raise RuntimeError(
                 "Missing environment variable(s): " + ", ".join(missing)
             )
-        self.model = model or os.environ["LLM_MODEL"]
+        self.model = model or llm_setting("LLM_MODEL")
         self._client = OpenAI(
-            base_url=os.environ["LLM_BASE_URL"],
-            api_key=os.environ["LLM_API_KEY"],
+            base_url=llm_setting("LLM_BASE_URL"),
+            api_key=llm_setting("LLM_API_KEY"),
             timeout=120,
+        )
+
+    def ping(self) -> None:
+        """One tiny completion. Raises when the key, URL or model is rejected."""
+        self._client.chat.completions.create(
+            model=self.model,
+            max_tokens=1,
+            messages=[{"role": "user", "content": "OK"}],
         )
 
     def extract_json(self, prompt: str, text: str) -> dict:
@@ -121,6 +160,8 @@ class LLMClient:
     def _attempt(self, prompt: str, text: str, system: str) -> dict | None:
         try:
             parsed = parse_json_object(self._complete(prompt, text, system))
+        except (AuthenticationError, PermissionDeniedError, NotFoundError) as exc:
+            raise LLMAuthError(f"HTTP {exc.status_code}") from exc
         except Exception:
             return None
         return parsed or None

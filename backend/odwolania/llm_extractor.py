@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from odwolania.config import load_settings
-from odwolania.llm import LLMClient, MAX_TEXT_CHARS, cache_skipped
+from odwolania.llm import LLMClient, MAX_TEXT_CHARS, cache_skipped, hosted
 
 CACHE_DIR = Path(__file__).resolve().parents[1] / ".cache" / "llm"
 
@@ -161,12 +161,14 @@ def _cached_json(prompt: str, text: str, client: LLMClient | None, cache_dir: Pa
     clipped = text[:MAX_TEXT_CHARS]
     digest = hashlib.sha256(f"{prompt}\0{clipped}".encode("utf-8")).hexdigest()
     path = cache_dir / f"{digest}.json"
-    if path.is_file() and not cache_skipped():
+    # A shared server must not hand one visitor's document data to another.
+    shared = hosted()
+    if path.is_file() and not cache_skipped() and not shared:
         cached = json.loads(path.read_text(encoding="utf-8"))
         return cached if isinstance(cached, dict) else {}
     llm = client if client is not None else LLMClient()
     raw = llm.extract_json(prompt, clipped)
-    if raw:
+    if raw and not shared:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return raw

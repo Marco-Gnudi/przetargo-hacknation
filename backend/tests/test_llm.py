@@ -24,6 +24,45 @@ def _client(replies: list[str]) -> tuple[LLMClient, _Completions]:
     return LLMClient(client=SimpleNamespace(chat=chat), model="test"), completions
 
 
+def test_request_credentials_override_the_environment(monkeypatch):
+    from odwolania.llm import llm_configured, llm_setting, set_llm_credentials
+
+    monkeypatch.setenv("LLM_BASE_URL", "https://server.example/v1")
+    monkeypatch.setenv("LLM_MODEL", "server-model")
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setattr("odwolania.llm.load_env", lambda: None)
+    try:
+        set_llm_credentials()
+        assert not llm_configured()
+        set_llm_credentials(api_key="visitor-key", model="visitor-model")
+        assert llm_configured()
+        assert llm_setting("LLM_API_KEY") == "visitor-key"
+        assert llm_setting("LLM_MODEL") == "visitor-model"
+        assert llm_setting("LLM_BASE_URL") == "https://server.example/v1"
+        client = LLMClient()
+        assert client.model == "visitor-model"
+        assert client._client.api_key == "visitor-key"
+    finally:
+        set_llm_credentials()
+
+
+def test_a_rejected_key_is_raised_instead_of_returning_empty_json():
+    import httpx
+    import pytest
+    from openai import AuthenticationError
+
+    from odwolania.llm import LLMAuthError
+
+    class _Refusing:
+        def create(self, **kwargs):
+            response = httpx.Response(401, request=httpx.Request("POST", "https://example.test"))
+            raise AuthenticationError("bad key", response=response, body=None)
+
+    client = LLMClient(client=SimpleNamespace(chat=SimpleNamespace(completions=_Refusing())), model="test")
+    with pytest.raises(LLMAuthError):
+        client.extract_json("prompt", "text")
+
+
 def test_parse_inserts_a_missing_array_close():
     raw = (
         '{"mocodawca":[{"data":{"nazwa":"Umbria"},'
