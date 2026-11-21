@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -19,9 +20,11 @@ from ocr_cleanup import cleanup_ocr
 
 # PSM 4 and 6 tied on skany 0001 (19/28 gold strings). These pages are one block, so PSM 6 stays.
 OCR_PSM = 6
-_OCR_CACHE_VERSION = "v2-raw"
+_OCR_CACHE_VERSION = "v3-osd"
 _MIN_CHARS_PER_PAGE = 50
+_PAGE_TIMEOUT_SECONDS = 90
 _ENV_PATH = Path(__file__).resolve().parents[1] / "backend" / ".env"
+_LOCAL_TESSDATA = Path(__file__).resolve().parent / "models" / "tessdata"
 _CACHE: dict[tuple, PdfDocument] = {}
 
 
@@ -62,16 +65,19 @@ def _read(path: Path) -> PdfDocument:
         pages.append({"number": index + 1, "text": text, "char_count": len(text.strip())})
         chunks.append(text)
     layer = collapse_spaced_letters("\n".join(chunks))
-    if not _layer_is_short(pages):
+    short = [index for index, page in enumerate(pages) if page["char_count"] < _MIN_CHARS_PER_PAGE]
+    if not short:
         pdf.close()
         return PdfDocument(str(path), pages, layer, False, False, "text", 0.0)
+    if not _layer_is_short(pages):
+        return _read_mixed(path, pdf, pages, chunks, short)
     cached = _load_ocr_cache(path)
     if cached is not None:
         pdf.close()
         cleaned = collapse_spaced_letters(cleanup_ocr(cached["text"]))
         return PdfDocument(str(path), pages, cleaned, False, True, "ocr", cached["seconds"])
     started = time.perf_counter()
-    ocr_text = _ocr_pages(pdf)
+    ocr_text = clean_text("\n".join(_ocr_pages(pdf)))
     elapsed = round(time.perf_counter() - started, 2)
     pdf.close()
     if not ocr_text.strip():
@@ -82,16 +88,58 @@ def _read(path: Path) -> PdfDocument:
     return PdfDocument(str(path), pages, cleaned, False, True, "ocr", elapsed)
 
 
-def _ocr_cache_file(path: Path) -> Path:
+def _read_mixed(path: Path, pdf, pages: list[dict], chunks: list[str], short: list[int]) -> PdfDocument:
+    """A digital PDF with some scanned pages: OCR only the pages without a text layer."""
+    cached = _load_ocr_cache(path, "pages")
+    if cached is not None and isinstance(cached.get("pages"), dict):
+        scanned = {int(index): text for index, text in cached["pages"].items()}
+        elapsed = cached["seconds"]
+    else:
+        started = time.perf_counter()
+        scanned = dict(zip(short, _ocr_pages(pdf, short)))
+        elapsed = round(time.perf_counter() - started, 2)
+        _save_ocr_cache(path, "", elapsed, "pages", {str(index): text for index, text in scanned.items()})
+    pdf.close()
+    if not any(text.strip() for text in scanned.values()):
+        layer = collapse_spaced_letters("\n".join(chunks))
+        return PdfDocument(str(path), pages, layer, True, False, "text", elapsed)
+    merged = [
+        cleanup_ocr(clean_text(scanned[index])) if index in scanned else chunk
+        for index, chunk in enumerate(chunks)
+    ]
+    text = collapse_spaced_letters("\n".join(merged))
+    return PdfDocument(str(path), pages, text, False, True, "ocr", elapsed)
+
+
+def _tessdata_dir() -> Path | None:
+    """A folder holding a better pol.traineddata, e.g. tessdata_best. Falls back to the system model."""
+    load_dotenv(_ENV_PATH)
+    candidates = [os.environ.get("OCR_TESSDATA") or "", str(_LOCAL_TESSDATA)]
+    for candidate in candidates:
+        if candidate and (Path(candidate) / "pol.traineddata").is_file():
+            return Path(candidate)
+    return None
+
+
+def _model_tag() -> str:
+    folder = _tessdata_dir()
+    if folder is None:
+        return "system"
+    return f"{folder}|{(folder / 'pol.traineddata').stat().st_size}"
+
+
+def _ocr_cache_file(path: Path, variant: str = "") -> Path:
     stat = path.stat()
-    token = f"{path}|{stat.st_mtime_ns}|{stat.st_size}|{OCR_PSM}|{_OCR_CACHE_VERSION}"
+    token = f"{path}|{stat.st_mtime_ns}|{stat.st_size}|{OCR_PSM}|{_OCR_CACHE_VERSION}|{_model_tag()}"
+    if variant:
+        token += f"|{variant}"
     digest = hashlib.sha256(token.encode()).hexdigest()
     folder = Path(__file__).resolve().parents[1] / "backend" / ".cache" / "ocr"
     return folder / f"{digest}.json"
 
 
-def _load_ocr_cache(path: Path) -> dict | None:
-    file = _ocr_cache_file(path)
+def _load_ocr_cache(path: Path, variant: str = "") -> dict | None:
+    file = _ocr_cache_file(path, variant)
     if not file.is_file():
         return None
     try:
@@ -161,13 +209,13 @@ def _measure_confidence(path: Path) -> float | None:
     return round(sum(scores) / len(scores), 1)
 
 
-def _save_ocr_cache(path: Path, text: str, seconds: float) -> None:
-    file = _ocr_cache_file(path)
+def _save_ocr_cache(path: Path, text: str, seconds: float, variant: str = "", pages: dict | None = None) -> None:
+    file = _ocr_cache_file(path, variant)
     file.parent.mkdir(parents=True, exist_ok=True)
-    file.write_text(
-        json.dumps({"text": text, "seconds": seconds}, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    payload = {"text": text, "seconds": seconds}
+    if pages is not None:
+        payload["pages"] = pages
+    file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def _layer_is_short(pages: list[dict]) -> bool:
@@ -176,29 +224,73 @@ def _layer_is_short(pages: list[dict]) -> bool:
     return sum(page["char_count"] for page in pages) < _MIN_CHARS_PER_PAGE * len(pages)
 
 
-def _ocr_pages(pdf) -> str:
+def _ocr_pages(pdf, indexes: list[int] | None = None) -> list[str]:
+    """Raw Tesseract text for each requested page (all pages by default)."""
+    wanted = list(range(len(pdf))) if indexes is None else indexes
     if not _configure_tesseract():
-        return ""
-    import pytesseract
+        return ["" for _ in wanted]
     from PIL import Image
 
+    config = f"--psm {OCR_PSM}"
+    folder = _tessdata_dir()
+    if folder is not None:
+        config += f' --tessdata-dir "{folder}"'
     parts = []
-    for page in pdf:
+    document_angle = 0
+    for position, index in enumerate(wanted):
+        page = pdf[index]
         dpi = _render_dpi(pdf, page)
         pixmap = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csGRAY, alpha=False)
-        image = Image.open(io.BytesIO(pixmap.tobytes("png")))
-        image = _prepare(image)
-        try:
-            parts.append(
-                pytesseract.image_to_string(
-                    image,
-                    lang="pol",
-                    config=f"--psm {OCR_PSM}",
-                )
-            )
-        except Exception:
-            parts.append("")
-    return clean_text("\n".join(parts))
+        image = _prepare(Image.open(io.BytesIO(pixmap.tobytes("png"))))
+        if document_angle:
+            image = image.rotate(-document_angle, expand=True, fillcolor=255)
+        text = _tesseract(image, config)
+        # Upside-down pages still yield word-like tokens, so the first page is always checked.
+        if position == 0 or _word_share(text) < 0.35:
+            angle = _osd_angle(image)
+            if angle:
+                second = _tesseract(image.rotate(-angle, expand=True, fillcolor=255), config)
+                if _word_share(second) > _word_share(text):
+                    text = second
+                    if position == 0:
+                        document_angle = angle
+        parts.append(text)
+    return parts
+
+
+def _tesseract(image, config: str) -> str:
+    import pytesseract
+
+    try:
+        return pytesseract.image_to_string(image, lang="pol", config=config, timeout=_PAGE_TIMEOUT_SECONDS)
+    except Exception:
+        return ""
+
+
+def _word_share(text: str) -> float:
+    """Share of tokens that look like words; a sideways page OCRs to short fragments."""
+    tokens = text.split()
+    if len(tokens) < 5:
+        return 0.0
+    words = [token for token in tokens if re.fullmatch(r"[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż]{3,}[.,:;]?", token)]
+    return len(words) / len(tokens)
+
+
+def _osd_angle(image) -> int:
+    """Clockwise degrees that make the page upright, from Tesseract's orientation detection."""
+    import pytesseract
+
+    folder = _tessdata_dir()
+    osd_config = "--psm 0 -c min_characters_to_try=5"
+    if folder is not None and (folder / "osd.traineddata").is_file():
+        osd_config += f' --tessdata-dir "{folder}"'
+    try:
+        found = pytesseract.image_to_osd(
+            image, config=osd_config, output_type=pytesseract.Output.DICT, timeout=_PAGE_TIMEOUT_SECONDS
+        )
+    except Exception:
+        return 0
+    return int(found.get("rotate") or 0) % 360
 
 
 def _render_dpi(pdf, page) -> int:
