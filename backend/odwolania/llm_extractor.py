@@ -156,8 +156,9 @@ def _cached_json(prompt: str, text: str, client: LLMClient | None, cache_dir: Pa
         return cached if isinstance(cached, dict) else {}
     llm = client if client is not None else LLMClient()
     raw = llm.extract_json(prompt, clipped)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    if raw:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return raw
 
 
@@ -165,6 +166,7 @@ def _shape(doc_type: str, raw: dict) -> dict:
     payload = raw if isinstance(raw, dict) else {}
     if doc_type == "pelnomocnictwo":
         payload = _nest_signers(payload)
+        payload = _lift_attorneys(payload)
     shaped = _apply(_SCHEMAS[doc_type], payload)
     if doc_type == "odwolanie":
         _finish_odwolanie(shaped)
@@ -222,6 +224,25 @@ def _finish_odwolanie(data: dict) -> None:
     authorities = data["Zamawiajacy"]
     if len(authorities) == 1:
         authorities[0]["prowadzacy_postepowanie"] = None
+
+
+def _lift_attorneys(raw: dict) -> dict:
+    """The model sometimes lists attorneys inside mocodawca instead of beside it."""
+    attorneys = raw.get("pelnomocnicy")
+    if isinstance(attorneys, list) and attorneys:
+        return raw
+    lifted: list = []
+    principals = raw.get("mocodawca")
+    if isinstance(principals, list):
+        for principal in principals:
+            nested = principal.get("pelnomocnicy") if isinstance(principal, dict) else None
+            if isinstance(nested, list):
+                lifted.extend(nested)
+    if not lifted:
+        return raw
+    copied = dict(raw)
+    copied["pelnomocnicy"] = lifted
+    return copied
 
 
 def _finish_pelnomocnictwo(data: dict) -> None:

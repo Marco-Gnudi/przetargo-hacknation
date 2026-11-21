@@ -24,6 +24,16 @@ def _client(replies: list[str]) -> tuple[LLMClient, _Completions]:
     return LLMClient(client=SimpleNamespace(chat=chat), model="test"), completions
 
 
+def test_parse_inserts_a_missing_array_close():
+    raw = (
+        '{"mocodawca":[{"data":{"nazwa":"Umbria"},'
+        '"pelnomocnicy":[{"imie_nazwisko":"Bartosz Jastrzębski","pesel":null}]}'
+        '}'
+    )
+    parsed = parse_json_object(raw)
+    assert parsed["mocodawca"][0]["pelnomocnicy"][0]["imie_nazwisko"] == "Bartosz Jastrzębski"
+
+
 def test_parse_strips_fence_and_takes_first_object():
     raw = 'pewność:\n```json\n{"a": {"b": 1}}\n```\n{"a": 2}'
     assert parse_json_object(raw) == {"a": {"b": 1}}
@@ -33,6 +43,23 @@ def test_extract_json_retries_once_then_returns_empty():
     client, completions = _client(["not json", "still not"])
     assert client.extract_json("pola", "tekst") == {}
     assert completions.calls == 2
+
+
+def test_extract_json_adds_provider_token_counts():
+    from odwolania.llm import current_usage, start_usage
+
+    class _Counted(_Completions):
+        def create(self, **kwargs):
+            result = super().create(**kwargs)
+            result.usage = SimpleNamespace(prompt_tokens=20, completion_tokens=5)
+            return result
+
+    completions = _Counted(['{"ok": true}', '{"ok": false}'])
+    client = LLMClient(client=SimpleNamespace(chat=SimpleNamespace(completions=completions)), model="test")
+    start_usage()
+    assert client.extract_json("pola", "jeden") == {"ok": True}
+    assert client.extract_json("pola", "dwa") == {"ok": False}
+    assert current_usage() == {"prompt_tokens": 40, "completion_tokens": 10}
 
 
 def test_extract_json_truncates_text_and_uses_temperature_zero():

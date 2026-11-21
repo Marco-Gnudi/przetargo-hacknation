@@ -46,6 +46,12 @@ const copy = {
     uncertain: "Niepewne",
     filesTotal: "{count} plików · {size}",
     bielikNote: "Model Bielik nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
+    bielikUsed: "Bielik",
+    tokens: "Tokeny",
+    promptTokens: "prompt",
+    completionTokens: "odpowiedź",
+    sourceRule: "reguła",
+    sourceLlm: "Bielik",
     unrecognized: "Dokument nie został rozpoznany. Ekstraktor nie przypisał go do odwołania, pełnomocnictwa ani potwierdzenia przelewu.",
     copyJson: "Kopiuj JSON",
     copied: "Skopiowano",
@@ -102,6 +108,12 @@ const copy = {
     uncertain: "Uncertain",
     filesTotal: "{count} files · {size}",
     bielikNote: "Bielik is not connected. This run used the deterministic extractor.",
+    bielikUsed: "Bielik",
+    tokens: "Tokens",
+    promptTokens: "prompt",
+    completionTokens: "completion",
+    sourceRule: "rule",
+    sourceLlm: "Bielik",
     unrecognized: "The document was not recognized. It was not classified as an appeal, a power of attorney, or a transfer confirmation.",
     copyJson: "Copy JSON",
     copied: "Copied",
@@ -245,8 +257,9 @@ function selectMode(mode) {
 }
 
 function apiBase() {
-  if (location.protocol === "http:" || location.protocol === "https:") return "";
-  return "http://127.0.0.1:8765";
+  const here = location.hostname === "127.0.0.1" || location.hostname === "localhost";
+  if (here && location.port === "8000") return "";
+  return "http://127.0.0.1:8000";
 }
 
 async function addFiles(fileListLike) {
@@ -346,12 +359,18 @@ async function submitFiles() {
   renderFiles();
 
   const form = new FormData();
+  form.append("mode", mode);
   selected.forEach((item) => form.append("files", item.file, item.file.name));
   try {
     const response = await fetch(`${apiBase()}/api/extract/batch`, { method: "POST", body: form });
     if (!response.ok) throw new Error(String(response.status));
     const body = await response.json();
-    state.submissions.push({ mode, results: body.results || [] });
+    state.submissions.push({
+      mode,
+      results: body.results || [],
+      servedMode: body.mode || null,
+      usage: body.usage || null,
+    });
     state.files = [];
   } catch {
     state.notice = { key: "apiError" };
@@ -378,8 +397,15 @@ function renderOutputs() {
     text.className = "summary-text";
     text.textContent = summarySentence(recognized, unrecognized, failed);
     summary.append(text);
-    if (latest.mode === "bielik") {
-      const note = document.createElement("p");
+    const note = document.createElement("p");
+    note.className = "summary-text";
+    if (latest.servedMode === "bielik") {
+      const usage = latest.usage || {};
+      const prompt = Number(usage.prompt_tokens) || 0;
+      const completion = Number(usage.completion_tokens) || 0;
+      note.textContent = `${t("bielikUsed")} · ${t("tokens")} ${prompt + completion} (${t("promptTokens")} ${prompt}, ${t("completionTokens")} ${completion})`;
+      summary.append(note);
+    } else if (latest.mode === "bielik") {
       note.className = "placeholder";
       note.textContent = t("bielikNote");
       summary.append(note);
@@ -450,7 +476,7 @@ function renderResult(item) {
     note.textContent = item.error || t("statuses").error;
     article.append(note);
   } else {
-    article.append(renderFields(item.result));
+    article.append(renderFields(item.result, item.sources || {}));
   }
 
   if (item.warnings && item.warnings.length) {
@@ -508,7 +534,7 @@ function uncertainMark() {
   return mark;
 }
 
-function renderFields(value) {
+function renderFields(value, sources) {
   const list = document.createElement("div");
   list.className = "field-list";
   Object.entries(flattenFields(value)).forEach(([key, fieldValue]) => {
@@ -525,6 +551,12 @@ function renderFields(value) {
       label.append(uncertainMark());
     } else {
       content.textContent = String(fieldValue);
+    }
+    if (sources && sources[key]) {
+      const tag = document.createElement("span");
+      tag.className = "source";
+      tag.textContent = sources[key] === "llm" ? t("sourceLlm") : t("sourceRule");
+      content.append(tag);
     }
     row.append(label, content);
     list.append(row);

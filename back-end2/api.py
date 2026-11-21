@@ -9,7 +9,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from pipeline import load_rules, process_pdf
+from llm_fill import fill_with_bielik, tag_rules
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_FILES = 30
@@ -44,7 +45,8 @@ app.add_middleware(PrivateNetworkMiddleware)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "engine": "deterministic"}
+    engine = "deterministic+bielik" if _bielik_configured() else "deterministic"
+    return {"status": "ok", "engine": engine}
 
 
 @app.post("/api/extract")
@@ -77,15 +79,37 @@ def extract_example(body: ExampleRequest):
 
 
 @app.post("/api/extract/batch")
-async def extract_batch(files: list[UploadFile] = File(...)):
+async def extract_batch(
+    files: list[UploadFile] = File(...),
+    mode: str = Form("regular"),
+):
+    if mode not in ("regular", "bielik"):
+        raise HTTPException(status_code=400, detail="mode must be regular or bielik")
+    from odwolania.llm import current_usage, start_usage
+
+    start_usage()
     selected = files[:MAX_FILES]
     results = []
     for upload in selected:
-        results.append(await _process_upload(upload))
-    return {"results": results, "truncated": len(files) > MAX_FILES}
+        results.append(await _process_upload(upload, mode))
+    return {
+        "results": results,
+        "truncated": len(files) > MAX_FILES,
+        "mode": mode,
+        "usage": current_usage(),
+    }
 
 
-async def _process_upload(upload: UploadFile):
+def _bielik_configured() -> bool:
+    import os
+
+    from odwolania.llm import load_env
+
+    load_env()
+    return all(os.environ.get(name) for name in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL"))
+
+
+async def _process_upload(upload: UploadFile, mode: str = "regular"):
     filename = Path(upload.filename or "document.pdf").name
     data = await upload.read()
     if not filename.lower().endswith(".pdf"):
@@ -103,7 +127,22 @@ async def _process_upload(upload: UploadFile):
             stored.write(data)
         payload, diagnostic = process_pdf(path, RULES)
         diagnostic["file"] = filename
-        return _envelope(filename, payload, diagnostic, None)
+        sources = tag_rules(payload)
+        if mode == "bielik":
+            try:
+                payload, document_type, sources = fill_with_bielik(
+                    path, payload, diagnostic["document_type"]
+                )
+                diagnostic = dict(diagnostic)
+                diagnostic["document_type"] = document_type
+            except Exception:
+                diagnostic = dict(diagnostic)
+                diagnostic["warnings"] = list(diagnostic.get("warnings") or []) + [
+                    "Bielik fill failed; deterministic values were kept."
+                ]
+        item = _envelope(filename, payload, diagnostic, None)
+        item["sources"] = sources
+        return item
     except Exception:
         return _envelope(filename, {}, None, "The PDF could not be read.")
     finally:

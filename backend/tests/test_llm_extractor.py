@@ -152,6 +152,27 @@ def test_signers_placed_beside_the_principal_are_nested(tmp_path):
     ]
 
 
+def test_attorneys_nested_in_the_principal_are_lifted(tmp_path):
+    client = _Fake(
+        {
+            "mocodawca": [
+                {
+                    "data": {"nazwa": "Umbria Rozwiązania sp. j.", "krs": "9997927279"},
+                    "pelnomocnicy": [
+                        {"imie_nazwisko": "Bartosz Jastrzębski"},
+                        {"imie_nazwisko": "Oliwia Zajkowski"},
+                    ],
+                }
+            ]
+        }
+    )
+    extracted = extract("pelnomocnictwo", "pełnomocnictwo", client, cache_dir=tmp_path)
+    assert [item["imie_nazwisko"] for item in extracted.data["pelnomocnicy"]] == [
+        "Bartosz Jastrzębski",
+        "Oliwia Zajkowski",
+    ]
+
+
 def test_regular_mode_does_not_call_the_llm_extractor(monkeypatch):
     def boom(*args, **kwargs):
         raise AssertionError("LLM extractor should not run in regular mode")

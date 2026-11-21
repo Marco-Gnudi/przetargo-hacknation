@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from contextvars import ContextVar
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -16,6 +17,25 @@ _JSON_ONLY = (
     "Odpowiedz wyłącznie jednym obiektem JSON. "
     "Bez markdown, bez komentarzy, bez tekstu przed ani po JSON."
 )
+
+
+_RUN_USAGE: ContextVar[dict[str, int] | None] = ContextVar("llm_run_usage", default=None)
+
+
+def start_usage() -> None:
+    """Begin a fresh token total for this request."""
+    _RUN_USAGE.set({"prompt_tokens": 0, "completion_tokens": 0})
+
+
+def current_usage() -> dict[str, int]:
+    """Tokens recorded since start_usage, from the provider response."""
+    usage = _RUN_USAGE.get()
+    if not usage:
+        return {"prompt_tokens": 0, "completion_tokens": 0}
+    return {
+        "prompt_tokens": usage["prompt_tokens"],
+        "completion_tokens": usage["completion_tokens"],
+    }
 
 
 def load_env() -> None:
@@ -31,7 +51,10 @@ def parse_json_object(raw: str) -> dict:
     if start == -1:
         raise ValueError("no JSON object")
     snippet = _first_object(text, start)
-    parsed = json.loads(snippet)
+    try:
+        parsed = json.loads(snippet)
+    except json.JSONDecodeError:
+        parsed = json.loads(_close_brackets(snippet))
     if not isinstance(parsed, dict):
         raise ValueError("JSON value is not an object")
     return parsed
@@ -81,7 +104,55 @@ class LLMClient:
                 {"role": "user", "content": f"{prompt}\n\n{text}"},
             ],
         )
+        _record_usage(response)
         return response.choices[0].message.content or ""
+
+
+def _record_usage(response: object) -> None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    prompt = int(getattr(usage, "prompt_tokens", 0) or 0)
+    completion = int(getattr(usage, "completion_tokens", 0) or 0)
+    bucket = _RUN_USAGE.get()
+    if bucket is None:
+        bucket = {"prompt_tokens": 0, "completion_tokens": 0}
+        _RUN_USAGE.set(bucket)
+    bucket["prompt_tokens"] += prompt
+    bucket["completion_tokens"] += completion
+
+
+def _close_brackets(text: str) -> str:
+    """Insert a missing ] or } when the model closes the wrong bracket."""
+    out: list[str] = []
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    for char in text:
+        if in_string:
+            out.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char in "{[":
+            stack.append(char)
+        elif char in "}]":
+            want = "{" if char == "}" else "["
+            while stack and stack[-1] != want:
+                out.append("]" if stack[-1] == "[" else "}")
+                stack.pop()
+            if stack:
+                stack.pop()
+        out.append(char)
+    while stack:
+        out.append("]" if stack.pop() == "[" else "}")
+    return "".join(out)
 
 
 def _first_object(text: str, start: int) -> str:

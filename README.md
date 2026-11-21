@@ -24,4 +24,4 @@ gh pr create --fill
 
 ## Running locally
 
-The website and its extractor are `back-end2`. From that folder, run `./start.sh` and open http://127.0.0.1:8000/. The `backend` folder is a separate project and is not connected to the page. See `backend/README.md` for that project.
+`start_ui.bat` starts one server from `back-end2` on http://127.0.0.1:8000 and the page on http://127.0.0.1:8080. Regular mode is Wiktor's deterministic extractor. Bielik mode keeps those values and fills empty fields from `backend/`. `./back-end2/start.sh` starts the same server.
