@@ -35,27 +35,37 @@ const copy = {
     cases: "Sprawy",
     casesHint: "Każdy zestaw dokumentów przesłany w tej sesji.",
     clear: "Wyczyść sesję",
-    colPdfs: "Liczba PDF",
-    colCompany: "Firma",
+    colFile: "Plik",
+    colType: "Rodzaj",
     colStatus: "Status",
     noCases: "Brak spraw.",
+    processingNow: "Przetwarzanie…",
+    apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom back-end2/start.sh.",
+    emptyFiles: "Ten plik ma 0 bajtów w oknie wyboru, więc nie ma w nim treści PDF. Pobierz pliki pod polem albo wybierz PDF, przy którym widać rozmiar.",
+    dropNote: "Możesz upuścić dowolny PDF z dysku. Plik w oknie wyboru musi mieć rozmiar większy niż zero.",
+    uncertain: "Niepewne",
+    filesTotal: "{count} plików · {size}",
+    bielikNote: "Model Bielik nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
+    unrecognized: "Dokument nie został rozpoznany. Ekstraktor nie przypisał go do odwołania, pełnomocnictwa ani potwierdzenia przelewu.",
+    copyJson: "Kopiuj JSON",
+    copied: "Skopiowano",
+    downloadJson: "Pobierz JSON",
+    showJson: "Pokaż JSON",
+    showFields: "Pokaż pola",
+    nullValue: "null",
+    types: {
+      odwolanie: "Odwołanie",
+      pelnomocnictwo: "Pełnomocnictwo",
+      przelew: "Potwierdzenie przelewu",
+      unknown: "Nierozpoznany dokument",
+    },
+    statuses: { ok: "Przetworzono", unrecognized: "Nierozpoznany", error: "Błąd" },
     remove: "Usuń",
     pdfOnly: "Można dodać tylko pliki PDF. Pominięto: {names}",
     already: "Te pliki PDF są już dodane.",
     pending: "Jeszcze nieprzetworzone",
-    working: "Przetwarzanie…",
-    recognised: "Rozpoznano {done} z {total}.",
-    unrecognised: "Nierozpoznany dokument",
-    noFields: "Brak pól dla tego typu.",
-    missing: "Brakujące pola",
-    failed: "Nie udało się przetworzyć dokumentów.",
-    statusDone: "Gotowe",
-    statusPartial: "Częściowo",
-    statusNone: "Nierozpoznane",
-    statusFailed: "Błąd",
-    sourceRule: "reguła",
-    sourceLlm: "bielik",
     footer: "Hacknation 2026 projekt dla Urzędu Zamówień Publicznych",
+    modeName: { regular: "przetwarzanie regularne", bielik: "Bielik" },
   },
   en: {
     title: "PrzetarGO",
@@ -81,31 +91,39 @@ const copy = {
     cases: "Cases",
     casesHint: "Every set of documents submitted in this session.",
     clear: "Clear session",
-    colPdfs: "PDFs",
-    colCompany: "Company",
+    colFile: "File",
+    colType: "Type",
     colStatus: "Status",
     noCases: "No cases yet.",
+    processingNow: "Processing…",
+    apiError: "The extractor did not respond. Refresh this page. If it still fails, run back-end2/start.sh.",
+    emptyFiles: "That file is 0 bytes in the file window, so it has no PDF content. Download the files under the box, or choose a PDF that shows a size.",
+    dropNote: "You can drop any PDF from your disk. In the file window it must show a size above zero.",
+    uncertain: "Uncertain",
+    filesTotal: "{count} files · {size}",
+    bielikNote: "Bielik is not connected. This run used the deterministic extractor.",
+    unrecognized: "The document was not recognized. It was not classified as an appeal, a power of attorney, or a transfer confirmation.",
+    copyJson: "Copy JSON",
+    copied: "Copied",
+    downloadJson: "Download JSON",
+    showJson: "Show JSON",
+    showFields: "Show fields",
+    nullValue: "null",
+    types: {
+      odwolanie: "Appeal",
+      pelnomocnictwo: "Power of attorney",
+      przelew: "Transfer confirmation",
+      unknown: "Unrecognized document",
+    },
+    statuses: { ok: "Processed", unrecognized: "Unrecognized", error: "Error" },
     remove: "Remove",
     pdfOnly: "Only PDF files can be added. Skipped: {names}",
     already: "Those PDFs are already attached.",
     pending: "Not processed yet",
-    working: "Processing…",
-    recognised: "Recognised {done} of {total}.",
-    unrecognised: "Unrecognised document",
-    noFields: "No fields for this type yet.",
-    missing: "Missing fields",
-    failed: "The documents could not be processed.",
-    statusDone: "Done",
-    statusPartial: "Partial",
-    statusNone: "Unrecognised",
-    statusFailed: "Failed",
-    sourceRule: "rule",
-    sourceLlm: "bielik",
     footer: "HackNation 2026 project for the Public Procurement Office",
+    modeName: { regular: "regular processing", bielik: "Bielik" },
   },
 };
-
-const API_URL = "http://127.0.0.1:8000";
 
 const state = {
   mode: "regular",
@@ -208,18 +226,6 @@ function applyCopy() {
   renderOutputs();
 }
 
-function summarySentence(submission) {
-  const files = submission.result.files;
-  const done = files.filter((file) => file.type).length;
-  const line = t("recognised").replace("{done}", String(done)).replace("{total}", String(files.length));
-  const missing = [];
-  files.forEach((file) => {
-    nullFields(file.json).forEach((field) => missing.push(`${file.filename}: ${field}`));
-  });
-  if (missing.length === 0) return line;
-  return `${line} ${t("missing")}: ${missing.join(", ")}.`;
-}
-
 function renderNotice() {
   if (!state.notice) {
     inputMessage.textContent = "";
@@ -238,30 +244,43 @@ function selectMode(mode) {
   });
 }
 
-function addFiles(fileListLike) {
+function apiBase() {
+  if (location.protocol === "http:" || location.protocol === "https:") return "";
+  return "http://127.0.0.1:8765";
+}
+
+async function addFiles(fileListLike) {
   const incoming = Array.from(fileListLike || []);
   if (incoming.length === 0) return;
 
   const rejected = [];
+  const empty = [];
   let added = 0;
 
-  incoming.forEach((file) => {
+  for (const file of incoming) {
     if (!isPdf(file)) {
       rejected.push(file.name);
-      return;
+      continue;
+    }
+    const size = await fileByteSize(file);
+    if (size === 0) {
+      empty.push(file.name);
+      continue;
     }
     const duplicate = state.files.some(
       (item) =>
         item.file.name === file.name &&
-        item.file.size === file.size &&
+        item.size === size &&
         item.file.lastModified === file.lastModified
     );
-    if (duplicate) return;
-    state.files.push({ id: state.nextId++, file });
+    if (duplicate) continue;
+    state.files.push({ id: state.nextId++, file, size });
     added += 1;
-  });
+  }
 
-  if (rejected.length > 0) {
+  if (empty.length > 0) {
+    state.notice = { key: "emptyFiles", names: empty };
+  } else if (rejected.length > 0) {
     state.notice = { key: "pdfOnly", names: rejected };
   } else if (added === 0) {
     state.notice = { key: "already" };
@@ -280,9 +299,16 @@ function isPdf(file) {
 
 function renderFiles() {
   fileList.replaceChildren();
+  const total = state.files.reduce((sum, item) => sum + item.size, 0);
   if (state.files.length === 0) {
     fileList.hidden = true;
   } else {
+    const summary = document.createElement("li");
+    summary.className = "file-total";
+    summary.textContent = t("filesTotal")
+      .replace("{count}", String(state.files.length))
+      .replace("{size}", formatSize(total));
+    fileList.append(summary);
     fileList.hidden = false;
     state.files.forEach((item) => {
       const row = document.createElement("li");
@@ -291,7 +317,7 @@ function renderFiles() {
       name.textContent = item.file.name;
       const size = document.createElement("span");
       size.className = "file-size";
-      size.textContent = formatSize(item.file.size);
+      size.textContent = formatSize(item.size);
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "remove-file";
@@ -308,70 +334,67 @@ function renderFiles() {
     });
   }
   submitButton.disabled = state.busy || state.files.length === 0;
-  submitButton.textContent = state.busy ? t("working") : t("process");
+  submitButton.textContent = state.busy ? t("processingNow") : t("process");
 }
 
 async function submitFiles() {
   if (state.files.length === 0 || state.busy) return;
-
-  const files = state.files.slice();
+  const selected = state.files.slice();
   const mode = state.mode;
-  const body = new FormData();
-  body.append("mode", mode);
-  files.forEach((item) => body.append("files", item.file, item.file.name));
-
   state.busy = true;
   state.notice = null;
-  renderNotice();
   renderFiles();
 
-  let result = null;
-  let error = false;
+  const form = new FormData();
+  selected.forEach((item) => form.append("files", item.file, item.file.name));
   try {
-    const response = await fetch(`${API_URL}/api/process`, { method: "POST", body });
+    const response = await fetch(`${apiBase()}/api/extract/batch`, { method: "POST", body: form });
     if (!response.ok) throw new Error(String(response.status));
-    result = await response.json();
+    const body = await response.json();
+    state.submissions.push({ mode, results: body.results || [] });
+    state.files = [];
   } catch {
-    error = true;
+    state.notice = { key: "apiError" };
+  } finally {
+    state.busy = false;
+    renderNotice();
+    renderFiles();
+    renderOutputs();
   }
-
-  state.submissions.push({
-    count: files.length,
-    names: files.map((item) => item.file.name),
-    mode,
-    result,
-    error,
-  });
-  if (!error) state.files = [];
-  state.busy = false;
-  renderNotice();
-  renderFiles();
-  renderOutputs();
 }
 
 function renderOutputs() {
+  const results = state.submissions.flatMap((submission) => submission.results || []);
   const latest = state.submissions[state.submissions.length - 1];
+
   summary.replaceChildren();
-  detail.replaceChildren();
   if (!latest) {
     summary.append(placeholder("summaryEmpty"));
-    detail.append(placeholder("fieldsEmpty"));
-  } else if (latest.error || !latest.result) {
+  } else {
+    const recognized = latest.results.filter((item) => item.status === "ok").length;
+    const unrecognized = latest.results.filter((item) => item.status === "unrecognized").length;
+    const failed = latest.results.filter((item) => item.status === "error").length;
     const text = document.createElement("p");
     text.className = "summary-text";
-    text.textContent = t("failed");
+    text.textContent = summarySentence(recognized, unrecognized, failed);
     summary.append(text);
+    if (latest.mode === "bielik") {
+      const note = document.createElement("p");
+      note.className = "placeholder";
+      note.textContent = t("bielikNote");
+      summary.append(note);
+    }
+  }
+
+  detail.replaceChildren();
+  if (!latest) {
     detail.append(placeholder("fieldsEmpty"));
   } else {
-    const text = document.createElement("p");
-    text.className = "summary-text";
-    text.textContent = summarySentence(latest);
-    summary.append(text);
-    latest.result.files.forEach((file) => detail.append(renderFileFields(file)));
+    latest.results.forEach((item) => detail.append(renderResult(item)));
   }
 
   resultsBody.replaceChildren();
-  if (state.submissions.length === 0) {
+  if (results.length === 0) {
     const row = document.createElement("tr");
     row.className = "empty-row";
     const cell = document.createElement("td");
@@ -381,102 +404,159 @@ function renderOutputs() {
     resultsBody.append(row);
     return;
   }
-
-  state.submissions.forEach((submission) => {
+  results.forEach((item) => {
     const row = document.createElement("tr");
-    const countCell = document.createElement("td");
-    countCell.textContent = String(submission.count);
-    const companyCell = document.createElement("td");
-    companyCell.textContent = companyName(submission) || "—";
+    const fileCell = document.createElement("td");
+    fileCell.textContent = item.filename;
+    const typeCell = document.createElement("td");
+    typeCell.textContent = typeLabel(item.document_type);
     const statusCell = document.createElement("td");
     const pill = document.createElement("span");
-    pill.className = "pill";
-    pill.textContent = statusLabel(submission);
+    pill.className = `pill pill-${item.status}`;
+    pill.textContent = t("statuses")[item.status] || item.status;
     statusCell.append(pill);
-    row.append(countCell, companyCell, statusCell);
-    resultsBody.append(row);
+    row.append(fileCell, typeCell, statusCell);
   });
 }
 
-function renderFileFields(file) {
-  const block = document.createElement("section");
-  block.className = "file-block";
-  const title = document.createElement("h3");
-  title.textContent = `${file.filename} · ${file.type || t("unrecognised")}`;
-  block.append(title);
-  if (!file.json || Object.keys(file.json).length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "placeholder";
-    empty.textContent = t("noFields");
-    block.append(empty);
-    return block;
+function summarySentence(recognized, unrecognized, failed) {
+  if (state.lang === "pl") {
+    return `Rozpoznane: ${recognized}. Nierozpoznane: ${unrecognized}. Błędy: ${failed}.`;
   }
-  block.append(renderObject(file.json, file.sources || {}));
-  return block;
+  return `Recognized: ${recognized}. Unrecognized: ${unrecognized}. Errors: ${failed}.`;
 }
 
-function renderObject(value, sources) {
-  const list = document.createElement("dl");
-  list.className = "field-list";
-  Object.entries(value).forEach(([key, item]) => {
-    const term = document.createElement("dt");
-    term.textContent = key;
-    const definition = document.createElement("dd");
-    if (item && typeof item === "object") {
-      definition.append(renderObject(item, sources));
-    } else {
-      definition.textContent = item === null || item === undefined ? "null" : String(item);
-      if (sources[key]) {
-        const tag = document.createElement("span");
-        tag.className = "source";
-        tag.textContent = sources[key] === "llm" ? t("sourceLlm") : t("sourceRule");
-        definition.append(tag);
-      }
+function typeLabel(documentType) {
+  return t("types")[documentType] || t("types").unknown;
+}
+
+function renderResult(item) {
+  const article = document.createElement("article");
+  article.className = "result";
+  const heading = document.createElement("h3");
+  const sizeLabel = Number.isFinite(item.size) ? ` · ${formatSize(item.size)}` : "";
+  heading.textContent = `${item.filename}${sizeLabel} — ${typeLabel(item.document_type)}`;
+  if (item.status === "unrecognized" || item.status === "error") heading.append(uncertainMark());
+  article.append(heading);
+
+  if (item.status === "unrecognized") {
+    const note = document.createElement("p");
+    note.className = "placeholder";
+    note.textContent = t("unrecognized");
+    article.append(note);
+  } else if (item.status === "error") {
+    const note = document.createElement("p");
+    note.className = "message";
+    note.textContent = item.error || t("statuses").error;
+    article.append(note);
+  } else {
+    article.append(renderFields(item.result));
+  }
+
+  if (item.warnings && item.warnings.length) {
+    const warnings = document.createElement("p");
+    warnings.className = "placeholder";
+    warnings.textContent = item.warnings.join(" ");
+    article.append(warnings);
+  }
+
+  const raw = document.createElement("pre");
+  raw.className = "json-view";
+  raw.hidden = true;
+  raw.textContent = JSON.stringify(item.result, null, 2);
+  article.append(raw);
+
+  const actions = document.createElement("div");
+  actions.className = "result-actions";
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "btn btn-ghost";
+  toggle.textContent = t("showJson");
+  toggle.addEventListener("click", () => {
+    raw.hidden = !raw.hidden;
+    toggle.textContent = raw.hidden ? t("showJson") : t("showFields");
+  });
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.className = "btn btn-ghost";
+  copy.textContent = t("copyJson");
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(raw.textContent);
+      copy.textContent = t("copied");
+    } catch {
+      copy.textContent = t("copyJson");
     }
-    list.append(term, definition);
+  });
+  const download = document.createElement("button");
+  download.type = "button";
+  download.className = "btn btn-ghost";
+  download.textContent = t("downloadJson");
+  download.addEventListener("click", () => downloadJson(item.filename, raw.textContent));
+  actions.append(toggle, copy, download);
+  article.append(actions);
+  return article;
+}
+
+function uncertainMark() {
+  const mark = document.createElement("span");
+  mark.className = "uncertain-mark";
+  mark.title = t("uncertain");
+  mark.setAttribute("role", "img");
+  mark.setAttribute("aria-label", t("uncertain"));
+  mark.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="#d52f2b"/><text x="8" y="12" text-anchor="middle" font-size="11" font-family="Segoe UI, sans-serif" font-weight="700" fill="#fff">?</text></svg>';
+  return mark;
+}
+
+function renderFields(value) {
+  const list = document.createElement("div");
+  list.className = "field-list";
+  Object.entries(flattenFields(value)).forEach(([key, fieldValue]) => {
+    const row = document.createElement("div");
+    row.className = "field-row";
+    const label = document.createElement("div");
+    label.className = "field-label";
+    label.textContent = key;
+    const content = document.createElement("div");
+    content.className = "field-value";
+    if (fieldValue === null) {
+      content.classList.add("is-null");
+      content.textContent = t("nullValue");
+      label.append(uncertainMark());
+    } else {
+      content.textContent = String(fieldValue);
+    }
+    row.append(label, content);
+    list.append(row);
   });
   return list;
 }
 
-function nullFields(value, prefix) {
-  if (!value || typeof value !== "object") return [];
-  const found = [];
-  Object.entries(value).forEach(([key, item]) => {
-    const path = prefix ? `${prefix}.${key}` : key;
-    if (item && typeof item === "object") found.push(...nullFields(item, path));
-    else if (item === null) found.push(path);
-  });
-  return found;
-}
-
-function companyName(submission) {
-  if (!submission.result) return "";
-  for (const file of submission.result.files) {
-    const name = findName(file.json);
-    if (name) return name;
+function flattenFields(value, prefix = "", output = {}) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) output[prefix] = "[]";
+    value.forEach((item, index) => flattenFields(item, `${prefix}[${index}]`, output));
+    return output;
   }
-  return "";
-}
-
-function findName(value) {
-  if (!value || typeof value !== "object") return "";
-  if (typeof value.nazwa === "string" && value.nazwa) return value.nazwa;
-  for (const item of Object.values(value)) {
-    if (item && typeof item === "object") {
-      const name = findName(item);
-      if (name) return name;
-    }
+  if (value && typeof value === "object") {
+    Object.entries(value).forEach(([key, child]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      flattenFields(child, path, output);
+    });
+    return output;
   }
-  return "";
+  output[prefix || "value"] = value;
+  return output;
 }
 
-function statusLabel(submission) {
-  if (submission.error || !submission.result) return t("statusFailed");
-  const files = submission.result.files;
-  const recognised = files.filter((file) => file.type).length;
-  if (recognised === 0) return t("statusNone");
-  if (recognised < files.length) return t("statusPartial");
-  return t("statusDone");
+function downloadJson(filename, contents) {
+  const base = filename.replace(/\.pdf$/i, "") || "document";
+  const blob = new Blob([contents + "\n"], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${base}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 function placeholder(key) {
@@ -498,8 +578,18 @@ function resetAll() {
 
 applyCopy();
 
+async function fileByteSize(file) {
+  if (file.size > 0) return file.size;
+  try {
+    return (await file.arrayBuffer()).byteLength;
+  } catch {
+    return 0;
+  }
+}
+
 function formatSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

@@ -24,4 +24,4 @@ gh pr create --fill
 
 ## Running locally
 
-`start_ui.bat` starts the Python API (http://127.0.0.1:8000) and the PrzetarGO page (http://127.0.0.1:8080). The CLI in `backend/start.bat` is unchanged. See `backend/README.md` for setup.
+The website and its extractor are `back-end2`. From that folder, run `./start.sh` and open http://127.0.0.1:8000/. The `backend` folder is a separate project and is not connected to the page. See `backend/README.md` for that project.
