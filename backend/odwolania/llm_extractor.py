@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from odwolania.config import load_settings
-from odwolania.llm import LLMClient, MAX_TEXT_CHARS, cache_skipped
+from odwolania.llm import LLMClient, MAX_TEXT_CHARS, cache_skipped, load_env
 
 CACHE_DIR = Path(__file__).resolve().parents[1] / ".cache" / "llm"
 
@@ -157,9 +158,16 @@ def _prompt(doc_type: str) -> str:
     raise ValueError(f"No llm_prompt for {doc_type}")
 
 
+def _env_model() -> str:
+    """Model name for the cache key, so replies from different models never mix."""
+    load_env()
+    return os.environ.get("LLM_MODEL", "")
+
+
 def _cached_json(prompt: str, text: str, client: LLMClient | None, cache_dir: Path) -> dict:
     clipped = text[:MAX_TEXT_CHARS]
-    digest = hashlib.sha256(f"{prompt}\0{clipped}".encode("utf-8")).hexdigest()
+    model_name = getattr(client, "model", "") if client is not None else _env_model()
+    digest = hashlib.sha256(f"{model_name}\0{prompt}\0{clipped}".encode("utf-8")).hexdigest()
     path = cache_dir / f"{digest}.json"
     if path.is_file() and not cache_skipped():
         cached = json.loads(path.read_text(encoding="utf-8"))
