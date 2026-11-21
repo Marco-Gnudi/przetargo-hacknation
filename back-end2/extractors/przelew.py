@@ -130,6 +130,12 @@ def _trim_title(value):
         flags=re.IGNORECASE,
     )[0]
     trimmed = trimmed.strip(" „”\"'`“”")
+    body = re.search(
+        r"(?i)((?:op[łl]ata\s+skarbowa|wpis\s+od\s+odwo[łl]ania).*)",
+        trimmed,
+    )
+    if body and body.start() > 0 and re.search(r"\d{8,}", trimmed[: body.start()]):
+        trimmed = body.group(1)
     return compact(trimmed).strip(" ,.;") or None
 
 

@@ -74,6 +74,14 @@ def _principal_block(text):
 
 def _legal_name(block):
     flat = compact(block)
+    long_form = re.search(
+        r"([A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż.&'-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż.&'-]*){0,8}\s+"
+        r"(?:spółk[aą]\s+akcyjn[aą]|spółk[aą]\s+z\s+ograniczon[aą]\s+odpowiedzialności[aą]))",
+        flat,
+        re.IGNORECASE,
+    )
+    if long_form:
+        return _without_heading(compact(long_form.group(1))).strip(" ,;")
     match = re.search(r"Mocodawc[aą]\s+jest\s+(.+?)(?:,|\s+ul\.)", flat, re.IGNORECASE)
     if match:
         return _without_heading(compact(match.group(1)))
