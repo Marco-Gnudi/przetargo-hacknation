@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrzetarGO</title>
-    <link rel="stylesheet" href="styles.css?v=16" />
+    <link rel="stylesheet" href="styles.css?v=18" />
   </head>
   <body>
     <header class="site-header">
@@ -69,6 +69,16 @@
           <header class="card-head">
             <h2 data-i18n="documents">Dokumenty</h2>
           </header>
+          <section class="input-folder" aria-labelledby="input-folder-label">
+            <div class="input-folder-head">
+              <h3 id="input-folder-label" data-i18n="inputFolder">Folder input</h3>
+              <div class="input-actions">
+                <button type="button" id="select-all" class="btn btn-ghost" data-i18n="selectAll">Zaznacz wszystkie</button>
+                <button type="button" id="delete-input" class="btn btn-ghost" data-i18n="deleteInput">Usuń input</button>
+              </div>
+            </div>
+            <div id="input-cases"></div>
+          </section>
           <div
             id="dropzone"
             class="dropzone"
@@ -143,6 +153,6 @@
     <footer class="site-footer">
       <p data-i18n="footer">Hacknation 2026 projekt dla Urzędu Zamówień Publicznych</p>
     </footer>
-    <script src="app.js?v=15"></script>
+    <script src="app.js?v=18"></script>
   </body>
 </html>

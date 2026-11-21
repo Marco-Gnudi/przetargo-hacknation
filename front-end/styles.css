@@ -237,6 +237,68 @@ a {
   font-size: 14px;
 }
 
+.input-folder {
+  margin: 16px 18px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.input-folder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.input-folder h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.input-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.input-actions .btn {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.input-hint,
+.summary-output {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.case-tree,
+.case-tree ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.case-tree > li + li {
+  margin-top: 10px;
+}
+
+.case-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+
+.case-tree ul li {
+  margin: 2px 0 0 26px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
 .dropzone {
   margin: 16px 18px 0;
   padding: 28px 20px;
