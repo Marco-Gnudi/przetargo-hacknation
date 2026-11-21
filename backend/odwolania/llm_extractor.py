@@ -199,6 +199,22 @@ def _shape(doc_type: str, raw: dict, *, normalise: bool, text: str = "") -> dict
     return shaped
 
 
+def normalise_vision(doc_type: str, raw: dict) -> dict:
+    """Shape a vision reply and drop identifiers that fail their check digit.
+
+    Unlike the text extractor, a value does not have to occur in the OCR string.
+    """
+    if doc_type not in _SCHEMAS:
+        return {}
+    payload = raw if isinstance(raw, dict) else {}
+    if doc_type == "pelnomocnictwo":
+        payload = _nest_signers(payload)
+        payload = _lift_attorneys(payload)
+    shaped = _apply(_SCHEMAS[doc_type], payload, normalise=True)
+    _reject_bad_ids(shaped)
+    return shaped
+
+
 def _from_ocr() -> bool:
     from odwolania.pdf_reader import OCR_TEXT
 

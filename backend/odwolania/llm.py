@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 import re
+import threading
 import time
 from contextvars import ContextVar
 from pathlib import Path
@@ -28,6 +30,8 @@ RETRY_TEXT_CHARS = 8_000
 
 
 logger = logging.getLogger("odwolania.llm")
+_VISION_SLOTS = threading.Semaphore(4)
+_VISION_TIMEOUT = 30.0
 
 _RUN_USAGE: ContextVar[dict[str, int] | None] = ContextVar("llm_run_usage", default=None)
 _SKIP_CACHE: ContextVar[bool] = ContextVar("llm_skip_cache", default=False)
@@ -111,6 +115,22 @@ class LLMClient:
             timeout=120,
         )
 
+    def extract_vision(self, prompt: str, images: list[bytes]) -> dict:
+        """Read a scanned page. 30s timeout, one retry, then an empty object."""
+        if not images:
+            return {}
+        content: list[dict] = [{"type": "text", "text": prompt}]
+        for image in images:
+            encoded = base64.b64encode(image).decode("ascii")
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{encoded}"},
+            })
+        parsed = self._vision_attempt(content)
+        if parsed:
+            return parsed
+        return self._vision_attempt(content) or {}
+
     def extract_json(self, prompt: str, text: str) -> dict:
         """Ask for JSON only. One stricter retry on an empty or invalid reply."""
         parsed = self._attempt(prompt, (text or "")[:MAX_TEXT_CHARS], _JSON_ONLY)
@@ -125,16 +145,57 @@ class LLMClient:
             return None
         return parsed or None
 
+    def _vision_attempt(self, content: list[dict]) -> dict | None:
+        delay = 1.0
+        rate_limits = 0
+        while True:
+            try:
+                with _VISION_SLOTS:
+                    raw = self._complete_messages(
+                        [
+                            {"role": "system", "content": _JSON_ONLY},
+                            {"role": "user", "content": content},
+                        ],
+                        timeout=_VISION_TIMEOUT,
+                    )
+            except Exception as exc:
+                if _rate_limited(exc) and rate_limits < 3:
+                    rate_limits += 1
+                    time.sleep(delay)
+                    delay = min(delay * 2, 16)
+                    continue
+                return None
+            try:
+                return parse_json_object(raw) or None
+            except Exception:
+                return None
+
     def _complete(self, prompt: str, text: str, system: str = _JSON_ONLY) -> str:
-        started = time.perf_counter()
-        response = self._client.chat.completions.create(
-            model=self.model,
-            temperature=0,
-            messages=[
+        return self._complete_messages(
+            [
                 {"role": "system", "content": system},
                 {"role": "user", "content": f"{prompt}\n\n{text}"},
-            ],
+            ]
         )
+
+    def _complete_messages(self, messages: list[dict], timeout: float | None = None) -> str:
+        started = time.perf_counter()
+        kwargs = {"model": self.model, "temperature": 0, "messages": messages}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        delay = 1.0
+        rate_limits = 0
+        while True:
+            try:
+                response = self._client.chat.completions.create(**kwargs)
+                break
+            except Exception as exc:
+                if timeout is None and _rate_limited(exc) and rate_limits < 3:
+                    rate_limits += 1
+                    time.sleep(delay)
+                    delay = min(delay * 2, 16)
+                    continue
+                raise
         elapsed = time.perf_counter() - started
         prompt_tokens, completion_tokens = _record_usage(response)
         document = _DOCUMENT.get() or "-"
@@ -146,6 +207,12 @@ class LLMClient:
             elapsed,
         )
         return response.choices[0].message.content or ""
+
+
+def _rate_limited(exc: Exception) -> bool:
+    if exc.__class__.__name__ == "RateLimitError":
+        return True
+    return getattr(exc, "status_code", None) == 429
 
 
 def _record_usage(response: object) -> tuple[int, int]:

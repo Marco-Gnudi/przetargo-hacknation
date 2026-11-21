@@ -16,7 +16,9 @@ import csv
 import json
 import re
 import sys
+import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -59,26 +61,73 @@ def main(argv: list[str] | None = None) -> int:
     load_env()
     start_usage()
     set_skip_cache(args.cache == "off")
+    from vision_fill import reset_vision_stats, vision_stats
+
+    reset_vision_stats()
     rules = load_rules()
     pdfs = sorted(data.rglob("*.pdf"))
-    rows = []
-    for index, pdf in enumerate(pdfs, start=1):
-        rows.append(_score_pdf(pdf, args.mode, rules))
-        if index % 25 == 0 or index == len(pdfs):
-            print(f"  {index}/{len(pdfs)}", flush=True)
+    started = time.perf_counter()
+    if args.mode == "regular" or len(pdfs) < 2:
+        rows = []
+        for index, pdf in enumerate(pdfs, start=1):
+            rows.append(_score_pdf(pdf, args.mode, rules))
+            if index % 25 == 0 or index == len(pdfs):
+                print(f"  {index}/{len(pdfs)}", flush=True)
+    else:
+        rows = _score_parallel(pdfs, args.mode, rules)
+    elapsed = time.perf_counter() - started
     summary = _summarise(rows)
     usage = current_usage()
     summary["mode"] = args.mode
     summary["cache"] = args.cache
     summary["data"] = str(data)
     summary["tokens"] = usage
+    summary["seconds"] = round(elapsed, 1)
+    summary["seconds_per_document"] = round(elapsed / len(pdfs), 2) if pdfs else 0
+    summary["vision"] = vision_stats()
     written = _write_reports(args.mode, summary, rows)
     _print(summary, rows, written)
     return 0
 
 
+def _score_parallel(pdfs: list[Path], mode: str, rules: dict) -> list[dict]:
+    """Up to four documents at once. HTTP 429 is retried inside the client."""
+    rows: list[dict | None] = [None] * len(pdfs)
+    totals = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
+
+    def job(pdf: Path) -> tuple[dict, dict]:
+        start_usage()
+        return _score_pdf(pdf, mode, rules), current_usage()
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(job, pdf): index for index, pdf in enumerate(pdfs)}
+        for future in as_completed(futures):
+            row, usage = future.result()
+            rows[futures[future]] = row
+            for key in totals:
+                totals[key] += usage.get(key, 0)
+            done += 1
+            if done % 25 == 0 or done == len(pdfs):
+                print(f"  {done}/{len(pdfs)}", flush=True)
+    bucket = current_usage()
+    for key in totals:
+        bucket[key] = bucket.get(key, 0) + totals[key]
+    return rows
+
+
+def _gold_path(pdf: Path) -> Path:
+    sibling = pdf.with_name(_JSON_BY_PDF.get(pdf.name, f"{pdf.stem}.json"))
+    if sibling.is_file():
+        return sibling
+    shared = pdf.parent.parent / "ground_truth_json" / f"{pdf.stem}.json"
+    if shared.is_file():
+        return shared
+    return sibling
+
+
 def _score_pdf(pdf: Path, mode: str, rules: dict) -> dict:
-    gold_path = pdf.with_name(_JSON_BY_PDF.get(pdf.name, f"{pdf.stem}.json"))
+    gold_path = _gold_path(pdf)
     gold = json.loads(gold_path.read_text(encoding="utf-8")) if gold_path.is_file() else {}
     if not isinstance(gold, dict):
         gold = {}
@@ -268,6 +317,15 @@ def _print(summary: dict, rows: list[dict], written: tuple[Path, Path]) -> None:
     print(
         f"tokens  calls={usage['calls']}  "
         f"prompt={usage['prompt_tokens']}  completion={usage['completion_tokens']}"
+    )
+    vision = summary.get("vision") or {}
+    print(
+        f"vision  calls={vision.get('calls', 0)}  "
+        f"cache_hits={vision.get('cache_hits', 0)}  errors={vision.get('errors', 0)}"
+    )
+    print(
+        f"time  seconds={summary.get('seconds', 0)}  "
+        f"per_document={summary.get('seconds_per_document', 0)}"
     )
     print()
     _table(["group", "n", "P", "R", "F1"], [

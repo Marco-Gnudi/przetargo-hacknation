@@ -102,6 +102,42 @@ def test_llm_call_log_names_the_document_and_tokens(caplog):
     assert current_usage()["calls"] == 1
 
 
+def test_extract_vision_sends_a_png_and_retries_once():
+    client, completions = _client(["not json", '{"nazwa": "Asterion"}'])
+    parsed = client.extract_vision("szablon", [b"\x89PNG"])
+    assert parsed == {"nazwa": "Asterion"}
+    assert completions.calls == 2
+    call = completions.seen[0]
+    assert call["temperature"] == 0
+    assert call["timeout"] == 30
+    parts = call["messages"][1]["content"]
+    assert parts[0]["type"] == "text"
+    assert parts[1]["type"] == "image_url"
+    assert parts[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_extract_vision_backs_off_on_http_429(monkeypatch):
+    slept = []
+    monkeypatch.setattr("odwolania.llm.time.sleep", lambda seconds: slept.append(seconds))
+
+    class _Limited(_Completions):
+        def create(self, **kwargs):
+            self.seen.append(kwargs)
+            self.calls += 1
+            if self.calls == 1:
+                error = RuntimeError("slow down")
+                error.status_code = 429
+                raise error
+            message = SimpleNamespace(content='{"ok": true}')
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+    completions = _Limited([])
+    client = LLMClient(client=SimpleNamespace(chat=SimpleNamespace(completions=completions)), model="test")
+    assert client.extract_vision("szablon", [b"\x89PNG"]) == {"ok": True}
+    assert completions.calls == 2
+    assert slept == [1.0]
+
+
 def test_extract_json_truncates_text_and_uses_temperature_zero():
     client, completions = _client(['{"ok": true}'])
     text = "ą" * (MAX_TEXT_CHARS + 50)

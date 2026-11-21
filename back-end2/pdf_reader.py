@@ -34,6 +34,7 @@ class PdfDocument:
     ocr_used: bool = False
     text_source: str = "text"
     ocr_seconds: float = 0.0
+    ocr_confidence: float | None = None
 
     @property
     def flat(self):
@@ -100,6 +101,64 @@ def _load_ocr_cache(path: Path) -> dict | None:
     if not isinstance(payload, dict) or "text" not in payload:
         return None
     return payload
+
+
+def mean_ocr_confidence(path) -> float | None:
+    """Mean Tesseract word confidence for a scan, cached next to the OCR text."""
+    path = Path(path)
+    cached = _load_ocr_cache(path)
+    if cached and isinstance(cached.get("confidence"), (int, float)):
+        return float(cached["confidence"])
+    document = read_pdf(path)
+    if document.text_source != "ocr":
+        return None
+    score = _measure_confidence(path)
+    if score is None:
+        return None
+    cached = _load_ocr_cache(path)
+    if cached is not None:
+        cached["confidence"] = score
+        file = _ocr_cache_file(path)
+        file.write_text(json.dumps(cached, ensure_ascii=False), encoding="utf-8")
+    document.ocr_confidence = score
+    return score
+
+
+def _measure_confidence(path: Path) -> float | None:
+    if not _configure_tesseract():
+        return None
+    import pytesseract
+    from PIL import Image
+
+    scores = []
+    pdf = pymupdf.open(path)
+    try:
+        for page in pdf:
+            dpi = _render_dpi(pdf, page)
+            pixmap = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csGRAY, alpha=False)
+            image = Image.open(io.BytesIO(pixmap.tobytes("png")))
+            image = _prepare(image)
+            try:
+                data = pytesseract.image_to_data(
+                    image,
+                    lang="pol",
+                    config=f"--psm {OCR_PSM}",
+                    output_type=pytesseract.Output.DICT,
+                )
+            except Exception:
+                continue
+            for conf in data.get("conf", []):
+                try:
+                    value = float(conf)
+                except (TypeError, ValueError):
+                    continue
+                if value >= 0:
+                    scores.append(value)
+    finally:
+        pdf.close()
+    if not scores:
+        return None
+    return round(sum(scores) / len(scores), 1)
 
 
 def _save_ocr_cache(path: Path, text: str, seconds: float) -> None:
