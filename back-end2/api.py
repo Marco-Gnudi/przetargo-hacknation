@@ -118,8 +118,8 @@ async def extract_batch(
         "truncated": len(files) > MAX_FILES,
         "mode": mode,
         "usage": current_usage(),
-        "elapsed_seconds": round(elapsed, 1),
-        "seconds_per_file": round(elapsed / count, 1) if count else 0.0,
+        "elapsed_seconds": round(elapsed, 3),
+        "seconds_per_file": round(elapsed / count, 3) if count else 0.0,
     }
 
 
