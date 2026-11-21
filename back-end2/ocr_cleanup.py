@@ -22,7 +22,10 @@ _LOOKALIKES = str.maketrans({
     "s": "5",
     "B": "8",
 })
-_RUN = re.compile(r"[0-9OoIlSsBb](?:[ \t]*[0-9OoIlSsBb./-]){3,}[0-9OoIlSsBb]")
+_RUN = re.compile(
+    r"(?<![A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ])[0-9OoIlSsBb](?:[ \t]*[0-9OoIlSsBb./-]){3,}[0-9OoIlSsBb]"
+    r"(?![A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ])"
+)
 _BROKEN_ID = re.compile(
     r"(?i)(?<![A-Za-z0-9])(PL[ \t-]*)?(\d(?:[ \t-]*\d){9,31})(?!\d)"
 )

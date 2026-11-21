@@ -24,6 +24,28 @@ class OcrCleanupTests(unittest.TestCase):
         cleaned = cleanup_ocr("„opłata   skarbowa”\r\n\r\n\r\nkoniec")
         self.assertEqual(cleaned, '"opłata skarbowa"\n\nkoniec')
 
+    def test_margin_specks_are_dropped_from_line_edges(self):
+        cleaned = cleanup_ocr("e . ODWOŁANIE |\n\"Odwołujący: * i\n| 10-230 Olsztyn | ,\nOdbiór i i i . zagospodarowanie")
+        self.assertEqual(
+            cleaned.splitlines(),
+            ["ODWOŁANIE", '"Odwołujący:', "10-230 Olsztyn", "Odbiór i zagospodarowanie"],
+        )
+
+    def test_misread_at_signs_are_repaired(self):
+        cleaned = cleanup_ocr(
+            "e-mail: m.wierzbickiawierzbicki-kancelaria.example\n"
+            "e-mail: biuroQwierzbicki-kancelaria.cxample\n"
+            "e-mail: d.kubiak(OQkubiak-kancelaria.example"
+        )
+        self.assertIn("m.wierzbicki@wierzbicki-kancelaria.example", cleaned)
+        self.assertIn("biuro@wierzbicki-kancelaria.example", cleaned)
+        self.assertIn("d.kubiak@kubiak-kancelaria.example", cleaned)
+
+    def test_company_suffix_lookalikes(self):
+        cleaned = cleanup_ocr("Orbisol Budownictwo Sp. Z 0.0.\nOlszewski 6 Partnerzy sp. K.")
+        self.assertIn("Orbisol Budownictwo Sp. z o.o.", cleaned)
+        self.assertIn("Olszewski & Partnerzy sp. k.", cleaned)
+
 
 class ChecksumTests(unittest.TestCase):
     def test_valid_nrb_and_a_single_confusion(self):
