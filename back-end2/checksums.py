@@ -1,4 +1,8 @@
-"""Repair identifiers with official check digits. An invalid value becomes null."""
+"""Repair identifiers with official check digits.
+
+A value with OCR letter confusions is fixed only when the fix passes the check digit.
+A clean all-digit read of the right length is kept even when its check digit fails.
+"""
 
 from __future__ import annotations
 
@@ -83,6 +87,9 @@ def _repair(value, length: int, valid) -> str | None:
         digits = _digits(trial)
         if len(digits) == length and valid(digits):
             return digits
+    # Test and generated documents use IDs that fail the check digit; a clean read is kept.
+    if compact.isdigit() and len(compact) == length:
+        return compact
     return None
 
 

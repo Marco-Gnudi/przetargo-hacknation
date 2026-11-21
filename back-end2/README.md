@@ -54,6 +54,10 @@ The weakest fields are power-of-attorney signatories and a few contracting-autho
 
 ## Limits
 
-Training PDFs have a text layer. A scanned file is reported as needing OCR. Tesseract is used only when it is already installed, and it is not required.
+Training PDFs have a text layer. A page with fewer than 50 characters of text is sent through Tesseract (`pol` language data; `osd` for page orientation). A digital PDF with a few scanned pages has only those pages OCR'd. Sideways or upside-down scans are turned upright before OCR. Without Tesseract installed, a scanned file is reported as needing OCR.
+
+`OCR_TESSDATA` in `backend/.env` can point at another folder with `pol.traineddata`, such as `tessdata_best`. On our scans it did not beat the system model, so it is off by default.
+
+To check OCR on files the rules were not tuned on, `backend/scripts/make_synthetic_scans.py` turns the text examples into degraded scans with their reference JSONs, and `backend/scripts/warm_ocr.py` OCRs a folder in parallel before `backend/scripts/evaluate.py` scores it.
 
 `czynnosc_powod_id` is taken from the sentence before the first `Zarzut nr 1`. Id 6 uses the wording stored in the reference files (`Odpowiedzi i wyjaśnienia do SWZ`). The schema comment writes that label with a slash.
