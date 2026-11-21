@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from odwolania.llm import LLMClient, MAX_TEXT_CHARS, parse_json_object
+from odwolania.llm import LLMClient, MAX_TEXT_CHARS, current_usage, parse_json_object
 
 
 class _Completions:
@@ -43,6 +43,19 @@ def test_extract_json_retries_once_then_returns_empty():
     client, completions = _client(["not json", "still not"])
     assert client.extract_json("pola", "tekst") == {}
     assert completions.calls == 2
+    assert "nic poza nim" in completions.seen[1]["messages"][0]["content"]
+
+
+def test_empty_reply_retries_with_shorter_text():
+    from odwolania.llm import RETRY_TEXT_CHARS
+
+    client, completions = _client(["{}", '{"ok": true}'])
+    text = "ą" * (RETRY_TEXT_CHARS + 50)
+    assert client.extract_json("pola", text) == {"ok": True}
+    assert completions.calls == 2
+    second = completions.seen[1]["messages"][1]["content"]
+    assert "ą" * RETRY_TEXT_CHARS in second
+    assert "ą" * (RETRY_TEXT_CHARS + 1) not in second
 
 
 def test_extract_json_adds_provider_token_counts():
@@ -59,7 +72,34 @@ def test_extract_json_adds_provider_token_counts():
     start_usage()
     assert client.extract_json("pola", "jeden") == {"ok": True}
     assert client.extract_json("pola", "dwa") == {"ok": False}
-    assert current_usage() == {"prompt_tokens": 40, "completion_tokens": 10}
+    assert current_usage() == {"prompt_tokens": 40, "completion_tokens": 10, "calls": 2}
+
+
+def test_llm_call_log_names_the_document_and_tokens(caplog):
+    import logging
+
+    from odwolania.llm import set_llm_document, start_usage
+
+    class _Counted(_Completions):
+        def create(self, **kwargs):
+            result = super().create(**kwargs)
+            result.usage = SimpleNamespace(prompt_tokens=20, completion_tokens=5)
+            return result
+
+    completions = _Counted(['{"ok": true}'])
+    client = LLMClient(client=SimpleNamespace(chat=SimpleNamespace(completions=completions)), model="test")
+    set_llm_document("pelnomocnictwo.pdf")
+    start_usage()
+    with caplog.at_level(logging.INFO, logger="odwolania.llm"):
+        assert client.extract_json("pola", "tekst") == {"ok": True}
+    text = caplog.text
+    assert "document=pelnomocnictwo.pdf" in text
+    assert "prompt_tokens=20" in text
+    assert "completion_tokens=5" in text
+    assert "time=" in text
+    assert "api_key" not in text.lower()
+    assert "LLM_API" not in text
+    assert current_usage()["calls"] == 1
 
 
 def test_extract_json_truncates_text_and_uses_temperature_zero():

@@ -30,21 +30,96 @@ def tag_rules(payload: dict) -> dict[str, str]:
     return sources
 
 
-def fill_with_bielik(pdf_path: Path, payload: dict, document_type: str) -> tuple[dict, str, dict[str, str]]:
-    """Run backend.odwolania in bielik mode and fill only what rules left empty."""
+def extract_bielik_only(pdf_path: Path) -> tuple[dict, str, dict[str, str], dict]:
+    """Classify, then fill every field from Bielik. Rules do not extract values."""
+    from odwolania.pipeline import process_file
+
+    processed = process_file(Path(pdf_path), mode="bielik_only")
+    if not processed.document_type:
+        return {}, "unknown", {}, {}
+    raw = processed.raw if processed.raw is not None else processed.data
+    return processed.data, processed.document_type, processed.sources, raw
+
+
+def fill_with_bielik(
+    pdf_path: Path, payload: dict, document_type: str
+) -> tuple[dict, str, dict[str, str], dict, dict]:
+    """Run backend.odwolania in bielik mode and fill only what rules left empty.
+
+    The last two values are the model's field values and the unnormalised JSON.
+    """
     from odwolania.pipeline import process_file
 
     processed = process_file(Path(pdf_path), mode="bielik")
+    bielik = _llm_leaves(processed.data, processed.sources)
+    raw_model = processed.raw if processed.raw is not None else processed.data
     if document_type == "unknown":
         if not processed.document_type:
-            return payload, document_type, {}
+            return payload, document_type, {}, {}, payload
         sources: dict[str, str] = {}
         _tag(processed.data, sources, "llm", "")
-        return processed.data, processed.document_type, sources
+        return processed.data, processed.document_type, sources, bielik, raw_model
     if processed.document_type != document_type:
-        return payload, document_type, tag_rules(payload)
+        return payload, document_type, tag_rules(payload), {}, payload
     merged, sources = merge_payload(payload, processed.data, processed.sources)
-    return merged, document_type, sources
+    raw_merged, _ = merge_payload(payload, raw_model, processed.sources)
+    return merged, document_type, sources, bielik, raw_merged
+
+
+def review_marks(final: dict, sources: dict[str, str], bielik: dict[str, object]) -> dict[str, dict]:
+    """Display-only comparison. The stored value stays the one in `final`."""
+    marks: dict[str, dict] = {}
+    for path, value in _leaves(final).items():
+        origin = _origin(path, sources)
+        other = bielik.get(path)
+        if origin == "llm":
+            marks[path] = {"mark": "llm", "bielik": value}
+        elif path not in bielik or other in (None, ""):
+            marks[path] = {"mark": "rule", "bielik": None}
+        elif _same(value, other):
+            marks[path] = {"mark": "agree", "bielik": other}
+        else:
+            marks[path] = {"mark": "diff", "bielik": other}
+    return marks
+
+
+def _llm_leaves(payload: dict, sources: dict[str, str]) -> dict[str, object]:
+    return {
+        path: value
+        for path, value in _leaves(payload).items()
+        if _origin(path, sources) == "llm"
+    }
+
+
+def _origin(path: str, sources: dict[str, str]) -> str:
+    if path in sources:
+        return sources[path]
+    leaf = path.rsplit(".", 1)[-1]
+    return sources.get(leaf, "rule")
+
+
+def _leaves(value: object, prefix: str = "") -> dict[str, object]:
+    found: dict[str, object] = {}
+    if isinstance(value, dict):
+        for key, item in value.items():
+            path = f"{prefix}.{key}" if prefix else key
+            found.update(_leaves(item, path))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            found.update(_leaves(item, f"{prefix}[{index}]"))
+    elif prefix:
+        found[prefix] = value
+    return found
+
+
+def _same(left: object, right: object) -> bool:
+    if left is None or right is None:
+        return left is right
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)) and not isinstance(left, bool) and not isinstance(right, bool):
+        return float(left) == float(right)
+    if isinstance(left, str) and isinstance(right, str):
+        return " ".join(left.split()) == " ".join(right.split())
+    return left == right
 
 
 def _fill(

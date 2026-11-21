@@ -125,7 +125,9 @@ def _from_llm(client: LLMClient, text: str, missing: list[str]) -> dict:
         "numer_transakcji jako identyfikator z tytułu lub treści, albo null. "
         "tytul jako treść tytułu bez cudzysłowów."
     )
-    raw = client.extract_json(prompt, text)
+    from odwolania.llm_extractor import _przelew_window
+
+    raw = client.extract_json(prompt, _przelew_window(text))
     if isinstance(raw.get("przelew_bankowy"), dict):
         raw = raw["przelew_bankowy"]
     found: dict = {}

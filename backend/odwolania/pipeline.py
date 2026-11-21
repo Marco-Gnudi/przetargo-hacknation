@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from odwolania.classifier import classify, classify_with_llm
+from odwolania.classifier import classify
 from odwolania.extractors.przelew import extract_przelew
 from odwolania.llm_extractor import extract as extract_llm
 from odwolania.pdf_reader import read_pdf
@@ -36,31 +36,43 @@ class ProcessedFile:
     document_type: str | None
     data: dict
     sources: dict[str, str]
+    raw: dict | None = None
 
 
 def process_file(pdf_path: Path, *, mode: str = "regular", filename: str | None = None) -> ProcessedFile:
-    """Classify and extract one PDF. `regular` never calls the LLM."""
-    if mode not in ("regular", "bielik"):
-        raise ValueError("mode must be regular or bielik")
+    """Classify and extract one PDF. `regular` never calls the LLM.
+
+    `bielik` fills from the model after the rules. `bielik_only` never runs
+    a deterministic extractor: every value comes from the model.
+    """
+    if mode not in ("regular", "bielik", "bielik_only"):
+        raise ValueError("mode must be regular, bielik, or bielik_only")
     text = read_pdf(pdf_path)
-    use_llm = mode == "bielik"
+    use_llm = mode != "regular"
     document_type = classify(text)
-    if document_type is None and use_llm:
-        document_type = classify_with_llm(text)
     if document_type is None:
         return ProcessedFile(filename or pdf_path.name, None, {}, {})
-    data, sources = _extract(document_type, text, use_llm=use_llm)
-    return ProcessedFile(filename or pdf_path.name, document_type, data, sources)
+    if mode == "bielik_only":
+        extracted = extract_llm(document_type, text)
+        return ProcessedFile(
+            filename or pdf_path.name,
+            document_type,
+            extracted.data,
+            extracted.sources,
+            extracted.raw if extracted.raw is not None else extracted.data,
+        )
+    data, sources, raw = _extract(document_type, text, use_llm=use_llm)
+    return ProcessedFile(filename or pdf_path.name, document_type, data, sources, raw)
 
 
-def _extract(document_type: str, text: str, *, use_llm: bool) -> tuple[dict, dict[str, str]]:
+def _extract(document_type: str, text: str, *, use_llm: bool) -> tuple[dict, dict[str, str], dict]:
     if document_type == "przelew":
         extracted = extract_przelew(text, use_llm=use_llm)
-        return extracted.data, extracted.sources
+        return extracted.data, extracted.sources, extracted.data
     if use_llm and document_type in _LLM_TYPES:
         extracted = extract_llm(document_type, text)
-        return extracted.data, extracted.sources
-    return {}, {}
+        return extracted.data, extracted.sources, extracted.raw if extracted.raw is not None else extracted.data
+    return {}, {}, {}
 
 
 def run(input_dir: Path, output_dir: Path) -> list[Path]:

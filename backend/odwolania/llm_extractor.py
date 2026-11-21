@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from odwolania.config import load_settings
-from odwolania.llm import LLMClient, MAX_TEXT_CHARS
+from odwolania.llm import LLMClient, MAX_TEXT_CHARS, cache_skipped
 
 CACHE_DIR = Path(__file__).resolve().parents[1] / ".cache" / "llm"
 
@@ -122,6 +122,7 @@ _TITLE = re.compile(
 class LlmExtraction:
     data: dict
     sources: dict[str, str]
+    raw: dict | None = None
 
 
 def extract(
@@ -135,9 +136,12 @@ def extract(
     if doc_type not in _SCHEMAS:
         raise ValueError(f"No LLM schema for {doc_type}")
     prompt = _prompt(doc_type)
-    raw = _cached_json(prompt, text or "", client, cache_dir if cache_dir is not None else CACHE_DIR)
-    data = _shape(doc_type, raw)
-    return LlmExtraction(data=data, sources=_sources(data))
+    source = text or ""
+    sent = _przelew_window(source) if doc_type == "przelew" else source
+    model = _cached_json(prompt, sent, client, cache_dir if cache_dir is not None else CACHE_DIR)
+    data = _shape(doc_type, model, normalise=True, text=source)
+    raw = _shape(doc_type, model, normalise=False, text=source)
+    return LlmExtraction(data=data, sources=_sources(data), raw=raw)
 
 
 def _prompt(doc_type: str) -> str:
@@ -151,7 +155,7 @@ def _cached_json(prompt: str, text: str, client: LLMClient | None, cache_dir: Pa
     clipped = text[:MAX_TEXT_CHARS]
     digest = hashlib.sha256(f"{prompt}\0{clipped}".encode("utf-8")).hexdigest()
     path = cache_dir / f"{digest}.json"
-    if path.is_file():
+    if path.is_file() and not cache_skipped():
         cached = json.loads(path.read_text(encoding="utf-8"))
         return cached if isinstance(cached, dict) else {}
     llm = client if client is not None else LLMClient()
@@ -162,25 +166,29 @@ def _cached_json(prompt: str, text: str, client: LLMClient | None, cache_dir: Pa
     return raw
 
 
-def _shape(doc_type: str, raw: dict) -> dict:
+def _shape(doc_type: str, raw: dict, *, normalise: bool, text: str = "") -> dict:
     payload = raw if isinstance(raw, dict) else {}
     if doc_type == "pelnomocnictwo":
         payload = _nest_signers(payload)
         payload = _lift_attorneys(payload)
-    shaped = _apply(_SCHEMAS[doc_type], payload)
+    shaped = _apply(_SCHEMAS[doc_type], payload, normalise=normalise)
+    if not normalise:
+        return shaped
     if doc_type == "odwolanie":
-        _finish_odwolanie(shaped)
+        _finish_odwolanie(shaped, text)
     elif doc_type == "pelnomocnictwo":
         _finish_pelnomocnictwo(shaped)
+    elif doc_type == "przelew":
+        _finish_przelew(shaped, text)
     return shaped
 
 
-def _apply(spec: object, raw: object) -> object:
+def _apply(spec: object, raw: object, *, normalise: bool) -> object:
     if isinstance(spec, dict):
         source = raw if isinstance(raw, dict) else {}
         if not source and isinstance(raw, list):
             source = next((item for item in raw if isinstance(item, dict)), {})
-        return {key: _apply(child, source.get(key)) for key, child in spec.items()}
+        return {key: _apply(child, source.get(key), normalise=normalise) for key, child in spec.items()}
     if isinstance(spec, list):
         items = raw if isinstance(raw, list) else ([raw] if isinstance(raw, dict) else [])
         child = spec[0]
@@ -188,8 +196,10 @@ def _apply(spec: object, raw: object) -> object:
         for item in items:
             if isinstance(item, str) and isinstance(child, dict) and "imie_nazwisko" in child:
                 item = {"imie_nazwisko": item}
-            shaped.append(_apply(child, item))
+            shaped.append(_apply(child, item, normalise=normalise))
         return shaped
+    if not normalise:
+        return raw if not isinstance(raw, (dict, list)) else None
     return _normalise(str(spec), raw)
 
 
@@ -209,7 +219,7 @@ def _nest_signers(raw: dict) -> dict:
     return copied
 
 
-def _finish_odwolanie(data: dict) -> None:
+def _finish_odwolanie(data: dict, text: str) -> None:
     kio = data["OdwolanieKIO"]
     powod = kio.get("czynnosc_powod_id")
     if powod not in _CZYNNOSC_OPIS:
@@ -224,6 +234,9 @@ def _finish_odwolanie(data: dict) -> None:
     authorities = data["Zamawiajacy"]
     if len(authorities) == 1:
         authorities[0]["prowadzacy_postepowanie"] = None
+    order = data["ZamowieniePubliczne"]
+    for field in ("numer_postepowania", "numer_bzp"):
+        order[field] = _keep_if_present(order.get(field), text)
 
 
 def _lift_attorneys(raw: dict) -> dict:
@@ -465,6 +478,93 @@ def _ted(value: object) -> str | None:
     direct = re.search(r"(\d{6})-(\d{4})", compact)
     if direct:
         return f"{direct.group(1)}-{direct.group(2)}"
+    return None
+
+
+_OPEN_QUOTE = {"„": "”", "“": "”", "«": "»", '"': '"'}
+_LOOSE = re.compile(r"[\"„“”«»'\s]+")
+
+
+def _przelew_window(text: str) -> str:
+    """Bank confirmation only, from its header through the Kanał line."""
+    start = re.search(
+        r"(?i)(?:dotyczy\s*:\s*potwierdzenie|potwierdzenie\s+(?:realizacji|wykonania|przelewu)|bank potwierdza)",
+        text,
+    )
+    tail = text[start.start() :] if start else text
+    end = re.search(r"(?i)kana[łl]\s*:", tail)
+    if end:
+        line_end = tail.find("\n", end.end())
+        tail = tail[: line_end if line_end != -1 else end.end()]
+    return tail[:2_000]
+
+
+def _finish_przelew(data: dict, text: str) -> None:
+    from odwolania.extractors.przelew import extract_przelew
+
+    body = data["przelew_bankowy"]
+    rules = extract_przelew(text, use_llm=False).data["przelew_bankowy"]
+    body["tytul"] = _verbatim_title(body.get("tytul"), text, rules.get("tytul"))
+    for field in ("na_rachunek", "z_rachunku"):
+        body[field] = _ground_digits(body.get(field), text, rules.get(field), width=26)
+    body["numer_transakcji"] = _ground_token(body.get("numer_transakcji"), text, rules.get("numer_transakcji"))
+
+
+def _verbatim_title(model: object, text: str, rule: object) -> str | None:
+    """Keep a title only when it occurs in the PDF, and extend it to the full span."""
+    model_ok = isinstance(model, str) and bool(model.strip()) and _contains_loose(text, model)
+    rule_text = rule.strip() if isinstance(rule, str) else ""
+    quoted = _quoted_title(text)
+    if model_ok and quoted and _contains_loose(quoted, model):
+        return quoted
+    if model_ok and rule_text and _contains_loose(rule_text, model):
+        return re.sub(r"\s+", " ", rule_text).strip()
+    if model_ok:
+        return re.sub(r"\s+", " ", model).strip()
+    return rule_text or None
+
+
+def _quoted_title(text: str) -> str | None:
+    label = re.search(r"(?is)tytu[łl]\s+przelewu\s*:\s*", text)
+    if not label:
+        return None
+    rest = text[label.end() :]
+    opener_at = next((index for index, char in enumerate(rest) if char in _OPEN_QUOTE), None)
+    if opener_at is None:
+        return None
+    closer = _OPEN_QUOTE[rest[opener_at]]
+    end = rest.find(closer, opener_at + 1)
+    if end == -1:
+        return None
+    title = re.sub(r"\s+", " ", rest[opener_at + 1 : end]).strip()
+    return title or None
+
+
+def _contains_loose(text: str, value: str) -> bool:
+    folded = _LOOSE.sub("", value).casefold()
+    return bool(folded) and folded in _LOOSE.sub("", text).casefold()
+
+
+def _keep_if_present(value: object, text: str) -> object:
+    if isinstance(value, str) and _contains_loose(text, value):
+        return value
+    return None
+
+
+def _ground_digits(value: object, text: str, rule: object, *, width: int) -> str | None:
+    digits_in_text = re.sub(r"\D", "", text)
+    if isinstance(value, str) and len(value) == width and value in digits_in_text:
+        return value
+    if isinstance(rule, str) and len(rule) == width and rule in digits_in_text:
+        return rule
+    return None
+
+
+def _ground_token(value: object, text: str, rule: object) -> str | None:
+    if isinstance(value, str) and value and re.search(re.escape(value), text, flags=re.IGNORECASE):
+        return value
+    if isinstance(rule, str) and rule and re.search(re.escape(rule), text, flags=re.IGNORECASE):
+        return rule
     return None
 
 

@@ -120,15 +120,11 @@ document_types:
       - przelew_bankowy.tytul
       - przelew_bankowy.z_rachunku
     llm_prompt: |
-      Jesteś ekstraktorem potwierdzenia przelewu. Zwróć wyłącznie JSON z obiektem przelew_bankowy. Nie kopiuj wartości z przykładu, jeśli nie ma ich w dokumencie. Brak danej = null.
-
-      data_operacji — data operacji albo realizacji, nie data wydruku. Format YYYY-MM-DD.
-      kwota — kwota przelewu jako liczba float (przecinek dziesiętny zamień na kropkę). Pomiń opłaty i fragmenty numerów spraw.
-      na_rachunek — rachunek odbiorcy, 26 cyfr, bez PL, spacji i kresek.
-      z_rachunku — rachunek zleceniodawcy, 26 cyfr, bez PL, spacji i kresek.
-      numer_transakcji — identyfikator typu CEN i 10-16 cyfr. null, gdy go nie ma.
-      tytul — treść tytułu przelewu, w jednej linii.
-
-      Zwróć JSON only.
-
-      Przykład. Fragment: „Data operacji: 21.03.2026. Kwota: 200,00 PLN. Z rachunku: PL05 4706 8028 7581 5397 2145 5024. Na rachunek: 68 4382 2304 9992 2952 6283 4736. Numer transakcji: CEN2604016344389. Tytuł: opłata skarbowa.” Fragment JSON: {"przelew_bankowy":{"data_operacji":"2026-03-21","kwota":200.0,"na_rachunek":"68438223049992295262834736","numer_transakcji":"CEN2604016344389","tytul":"opłata skarbowa","z_rachunku":"05470680287581539721455024"}}.
+      Zwróć wyłącznie jeden obiekt JSON z kluczem przelew_bankowy. Brak danej = null. Nie zgaduj.
+      data_operacji — YYYY-MM-DD, data operacji albo realizacji, nie data wydruku.
+      kwota — liczba float, kwota przelewu, przecinek dziesiętny jako kropka.
+      na_rachunek — 26 cyfr rachunku odbiorcy, bez PL, spacji i kresek.
+      z_rachunku — 26 cyfr rachunku zleceniodawcy, bez PL, spacji i kresek.
+      numer_transakcji — identyfikator CEN z dokumentu, znak w znak, albo null.
+      tytul — pełny tekst między cudzysłowami po „Tytuł przelewu:”, znak w znak, łącznie z końcowym kodem CEN…, nigdy skracany; null, gdy go nie ma.
+      Przykład. Wejście: w dniu 13.01.2026 z rachunku nr 34 3654 2349 9314 7411 7069 5211 wykonano przelew w kwocie 17,00 na rachunek nr 56 2417 2768 4947 7284 8501 3773. Tytuł przelewu: „opłata skarbowa od pełnomocnictwa dla Cezary Kaczmark i Sławomir Sadowski w postępowaniu przed KIO w przetargu SWZ.896.2026 CEN2601247064794”. Numer referencyjny operacji: CEN2601247064794. Wyjście: {"przelew_bankowy":{"data_operacji":"2026-01-13","kwota":17.0,"na_rachunek":"56241727684947728485013773","numer_transakcji":"CEN2601247064794","tytul":"opłata skarbowa od pełnomocnictwa dla Cezary Kaczmark i Sławomir Sadowski w postępowaniu przed KIO w przetargu SWZ.896.2026 CEN2601247064794","z_rachunku":"34365423499314741170695211"}}

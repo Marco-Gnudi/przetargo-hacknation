@@ -41,7 +41,6 @@ def test_llm_classifier_accepts_only_configured_types():
 def test_process_przyklad_01_regular_does_not_construct_a_client(monkeypatch):
     monkeypatch.setattr("odwolania.llm.LLMClient", _BoomCtor)
     monkeypatch.setattr("odwolania.extractors.przelew.LLMClient", _BoomCtor)
-    monkeypatch.setattr("odwolania.pipeline.classify_with_llm", _BoomCtor)
     pdf = _CASE / "potwierdzenie_przelewu.pdf"
     processed = process_file(pdf, mode="regular")
     assert processed.document_type == "przelew"

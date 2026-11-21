@@ -4,12 +4,14 @@ The CLI in main.py stays the evaluation entry point. This module only
 receives uploads, calls process_pdf, and deletes the temporary file.
 """
 
+import logging
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from pipeline import load_rules, process_pdf
-from llm_fill import fill_with_bielik, tag_rules
+from llm_fill import extract_bielik_only, fill_with_bielik, review_marks, tag_rules
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_FILES = 30
@@ -25,6 +27,19 @@ FRONTEND = Path(__file__).resolve().parents[1] / "front-end"
 DATASET = Path(__file__).resolve().parents[1] / "UZP-hacknation-task" / "dane"
 CASE_NAME = re.compile(r"^przyklad_\d{2}$")
 RULES = load_rules()
+
+def _show_llm_calls() -> None:
+    log = logging.getLogger("odwolania.llm")
+    log.setLevel(logging.INFO)
+    log.propagate = False
+    if log.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    log.addHandler(handler)
+
+
+_show_llm_calls()
 
 app = FastAPI(title="PrzetarGO")
 class PrivateNetworkMiddleware(BaseHTTPMiddleware):
@@ -82,21 +97,29 @@ def extract_example(body: ExampleRequest):
 async def extract_batch(
     files: list[UploadFile] = File(...),
     mode: str = Form("regular"),
+    nocache: str = Form("0"),
+    nocache_query: str = Query("", alias="nocache"),
 ):
-    if mode not in ("regular", "bielik"):
-        raise HTTPException(status_code=400, detail="mode must be regular or bielik")
-    from odwolania.llm import current_usage, start_usage
+    if mode not in ("regular", "bielik", "bielik_only"):
+        raise HTTPException(status_code=400, detail="mode must be regular, bielik, or bielik_only")
+    from odwolania.llm import current_usage, set_skip_cache, start_usage
 
     start_usage()
+    set_skip_cache(_enabled(nocache) or _enabled(nocache_query))
+    started = time.perf_counter()
     selected = files[:MAX_FILES]
     results = []
     for upload in selected:
         results.append(await _process_upload(upload, mode))
+    elapsed = time.perf_counter() - started
+    count = len(results)
     return {
         "results": results,
         "truncated": len(files) > MAX_FILES,
         "mode": mode,
         "usage": current_usage(),
+        "elapsed_seconds": round(elapsed, 1),
+        "seconds_per_file": round(elapsed / count, 1) if count else 0.0,
     }
 
 
@@ -109,28 +132,43 @@ def _bielik_configured() -> bool:
     return all(os.environ.get(name) for name in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL"))
 
 
+def _enabled(value: str) -> bool:
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
 async def _process_upload(upload: UploadFile, mode: str = "regular"):
     filename = Path(upload.filename or "document.pdf").name
+    from odwolania.llm import set_llm_document
+
+    set_llm_document(filename)
     data = await upload.read()
-    if not filename.lower().endswith(".pdf"):
-        return _envelope(filename, {}, None, "Only PDF files are accepted.")
+    rejected = pdf_rejection(filename, data)
+    if rejected:
+        return _envelope(filename, {}, None, rejected, status="rejected")
     if not data:
         return _envelope(filename, {}, None, "The file is empty.")
     if len(data) > MAX_BYTES:
         return _envelope(filename, {}, None, "The file is larger than 20 MB.")
-    if not data.startswith(b"%PDF"):
-        return _envelope(filename, {}, None, "The file is not a PDF.")
 
     handle, path = tempfile.mkstemp(suffix=".pdf")
     try:
         with os.fdopen(handle, "wb") as stored:
             stored.write(data)
+        if mode == "bielik_only":
+            payload, document_type, sources, raw = extract_bielik_only(Path(path))
+            diagnostic = {"document_type": document_type, "warnings": [], "file": filename}
+            item = _envelope(filename, payload, diagnostic, None)
+            item["sources"] = sources
+            item["raw"] = raw
+            return item
         payload, diagnostic = process_pdf(path, RULES)
         diagnostic["file"] = filename
         sources = tag_rules(payload)
+        raw = payload
+        bielik: dict = {}
         if mode == "bielik":
             try:
-                payload, document_type, sources = fill_with_bielik(
+                payload, document_type, sources, bielik, raw = fill_with_bielik(
                     path, payload, diagnostic["document_type"]
                 )
                 diagnostic = dict(diagnostic)
@@ -140,8 +178,13 @@ async def _process_upload(upload: UploadFile, mode: str = "regular"):
                 diagnostic["warnings"] = list(diagnostic.get("warnings") or []) + [
                     "Bielik fill failed; deterministic values were kept."
                 ]
+                raw = payload
+                bielik = {}
         item = _envelope(filename, payload, diagnostic, None)
         item["sources"] = sources
+        item["raw"] = raw
+        if mode == "bielik":
+            item["review"] = review_marks(payload, sources, bielik)
         return item
     except Exception:
         return _envelope(filename, {}, None, "The PDF could not be read.")
@@ -152,14 +195,23 @@ async def _process_upload(upload: UploadFile, mode: str = "regular"):
             pass
 
 
-def _envelope(filename, payload, diagnostic, error):
+def pdf_rejection(filename: str, data: bytes) -> str | None:
+    """A file is a PDF only when the name and the header both say so."""
+    name = Path(filename or "").name
+    if name.lower().endswith(".pdf") and data.startswith(b"%PDF"):
+        return None
+    return f"Rejected: {name} – not a PDF"
+
+
+def _envelope(filename, payload, diagnostic, error, status=None):
     document_type = diagnostic["document_type"] if diagnostic else "unknown"
-    if error:
-        status = "error"
-    elif document_type == "unknown":
-        status = "unrecognized"
-    else:
-        status = "ok"
+    if status is None:
+        if error:
+            status = "error"
+        elif document_type == "unknown":
+            status = "unrecognized"
+        else:
+            status = "ok"
     return {
         "filename": filename,
         "document_type": document_type,

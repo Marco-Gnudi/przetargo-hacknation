@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import time
 from contextvars import ContextVar
 from pathlib import Path
 
@@ -17,25 +19,50 @@ _JSON_ONLY = (
     "Odpowiedz wyłącznie jednym obiektem JSON. "
     "Bez markdown, bez komentarzy, bez tekstu przed ani po JSON."
 )
+_JSON_ONLY_STRICT = (
+    "Zwróć wyłącznie jeden obiekt JSON i nic poza nim. "
+    "Bez markdown, bez komentarza, bez zdania przed ani po JSON. "
+    "Puste pola zapisz jako null."
+)
+RETRY_TEXT_CHARS = 8_000
 
+
+logger = logging.getLogger("odwolania.llm")
 
 _RUN_USAGE: ContextVar[dict[str, int] | None] = ContextVar("llm_run_usage", default=None)
+_SKIP_CACHE: ContextVar[bool] = ContextVar("llm_skip_cache", default=False)
+_DOCUMENT: ContextVar[str] = ContextVar("llm_document", default="")
 
 
 def start_usage() -> None:
     """Begin a fresh token total for this request."""
-    _RUN_USAGE.set({"prompt_tokens": 0, "completion_tokens": 0})
+    _RUN_USAGE.set({"prompt_tokens": 0, "completion_tokens": 0, "calls": 0})
 
 
 def current_usage() -> dict[str, int]:
-    """Tokens recorded since start_usage, from the provider response."""
+    """Tokens and call count recorded since start_usage."""
     usage = _RUN_USAGE.get()
     if not usage:
-        return {"prompt_tokens": 0, "completion_tokens": 0}
+        return {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
     return {
         "prompt_tokens": usage["prompt_tokens"],
         "completion_tokens": usage["completion_tokens"],
+        "calls": usage.get("calls", 0),
     }
+
+
+def set_skip_cache(enabled: bool) -> None:
+    """When enabled, the next extractions ignore saved model replies."""
+    _SKIP_CACHE.set(bool(enabled))
+
+
+def cache_skipped() -> bool:
+    return bool(_SKIP_CACHE.get())
+
+
+def set_llm_document(name: str) -> None:
+    """Name printed with each model call. Never a secret."""
+    _DOCUMENT.set(name or "")
 
 
 def load_env() -> None:
@@ -85,41 +112,54 @@ class LLMClient:
         )
 
     def extract_json(self, prompt: str, text: str) -> dict:
-        """Ask for JSON only. One retry, then {} on any failure."""
-        clipped = (text or "")[:MAX_TEXT_CHARS]
-        for _ in range(2):
-            try:
-                raw = self._complete(prompt, clipped)
-                return parse_json_object(raw)
-            except Exception:
-                continue
-        return {}
+        """Ask for JSON only. One stricter retry on an empty or invalid reply."""
+        parsed = self._attempt(prompt, (text or "")[:MAX_TEXT_CHARS], _JSON_ONLY)
+        if parsed:
+            return parsed
+        return self._attempt(prompt, (text or "")[:RETRY_TEXT_CHARS], _JSON_ONLY_STRICT) or {}
 
-    def _complete(self, prompt: str, text: str) -> str:
+    def _attempt(self, prompt: str, text: str, system: str) -> dict | None:
+        try:
+            parsed = parse_json_object(self._complete(prompt, text, system))
+        except Exception:
+            return None
+        return parsed or None
+
+    def _complete(self, prompt: str, text: str, system: str = _JSON_ONLY) -> str:
+        started = time.perf_counter()
         response = self._client.chat.completions.create(
             model=self.model,
             temperature=0,
             messages=[
-                {"role": "system", "content": _JSON_ONLY},
+                {"role": "system", "content": system},
                 {"role": "user", "content": f"{prompt}\n\n{text}"},
             ],
         )
-        _record_usage(response)
+        elapsed = time.perf_counter() - started
+        prompt_tokens, completion_tokens = _record_usage(response)
+        document = _DOCUMENT.get() or "-"
+        logger.info(
+            "LLM call document=%s prompt_tokens=%d completion_tokens=%d time=%.2fs",
+            document,
+            prompt_tokens,
+            completion_tokens,
+            elapsed,
+        )
         return response.choices[0].message.content or ""
 
 
-def _record_usage(response: object) -> None:
+def _record_usage(response: object) -> tuple[int, int]:
     usage = getattr(response, "usage", None)
-    if usage is None:
-        return
-    prompt = int(getattr(usage, "prompt_tokens", 0) or 0)
-    completion = int(getattr(usage, "completion_tokens", 0) or 0)
+    prompt = int(getattr(usage, "prompt_tokens", 0) or 0) if usage is not None else 0
+    completion = int(getattr(usage, "completion_tokens", 0) or 0) if usage is not None else 0
     bucket = _RUN_USAGE.get()
     if bucket is None:
-        bucket = {"prompt_tokens": 0, "completion_tokens": 0}
+        bucket = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
         _RUN_USAGE.set(bucket)
     bucket["prompt_tokens"] += prompt
     bucket["completion_tokens"] += completion
+    bucket["calls"] = int(bucket.get("calls", 0)) + 1
+    return prompt, completion
 
 
 def _close_brackets(text: str) -> str:

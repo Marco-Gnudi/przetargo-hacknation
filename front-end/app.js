@@ -8,6 +8,8 @@ const summary = document.querySelector("#summary");
 const detail = document.querySelector("#detail");
 const resultsBody = document.querySelector("#results-body");
 const modeButtons = document.querySelectorAll("[data-mode]");
+const nocacheBox = document.querySelector("#nocache");
+const normaliseBox = document.querySelector("#normalise");
 const langButtons = document.querySelectorAll("[data-lang]");
 
 const copy = {
@@ -22,7 +24,10 @@ const copy = {
     modeRegular: "Regularne",
     modeRegularHint: "Bez modelu językowego",
     modeBielik: "Bielik",
-    modeBielikHint: "Model językowy",
+    modeBielikHint: "Reguły, potem model",
+    modeBielikOnly: "Tylko Bielik",
+    modeBielikOnlyHint: "Bez reguł, same wywołania modelu",
+    noCache: "Bez pamięci podręcznej",
     documents: "Dokumenty",
     dropAria: "Dodaj pliki PDF. Upuść je tutaj albo naciśnij Enter, aby je wskazać.",
     dropTitle: "Upuść pliki PDF",
@@ -50,8 +55,12 @@ const copy = {
     tokens: "Tokeny",
     promptTokens: "prompt",
     completionTokens: "odpowiedź",
-    sourceRule: "reguła",
+    llmCalls: "Wywołania",
+    sourceRule: "Reguły",
     sourceLlm: "Bielik",
+    sourceAgree: "Reguły ✓ Bielik",
+    normalise: "Normalizuj JSON",
+    timing: "{seconds} s · {average} s na plik",
     unrecognized: "Dokument nie został rozpoznany. Ekstraktor nie przypisał go do odwołania, pełnomocnictwa ani potwierdzenia przelewu.",
     copyJson: "Kopiuj JSON",
     copied: "Skopiowano",
@@ -71,7 +80,7 @@ const copy = {
     already: "Te pliki PDF są już dodane.",
     pending: "Jeszcze nieprzetworzone",
     footer: "Hacknation 2026 projekt dla Urzędu Zamówień Publicznych",
-    modeName: { regular: "przetwarzanie regularne", bielik: "Bielik" },
+    modeName: { regular: "przetwarzanie regularne", bielik: "Bielik", bielik_only: "Tylko Bielik" },
   },
   en: {
     title: "PrzetarGO",
@@ -84,7 +93,10 @@ const copy = {
     modeRegular: "Regular",
     modeRegularHint: "No language model",
     modeBielik: "Bielik",
-    modeBielikHint: "Language model",
+    modeBielikHint: "Rules, then the model",
+    modeBielikOnly: "Bielik only",
+    modeBielikOnlyHint: "No rules, model calls only",
+    noCache: "No cache",
     documents: "Documents",
     dropAria: "Add PDF files. Drop them here or press Enter to browse.",
     dropTitle: "Drop PDFs here",
@@ -112,8 +124,12 @@ const copy = {
     tokens: "Tokens",
     promptTokens: "prompt",
     completionTokens: "completion",
-    sourceRule: "rule",
+    llmCalls: "Calls",
+    sourceRule: "Rules",
     sourceLlm: "Bielik",
+    sourceAgree: "Rules ✓ Bielik",
+    normalise: "Normalise JSON",
+    timing: "{seconds} s · {average} s per file",
     unrecognized: "The document was not recognized. It was not classified as an appeal, a power of attorney, or a transfer confirmation.",
     copyJson: "Copy JSON",
     copied: "Copied",
@@ -133,7 +149,7 @@ const copy = {
     already: "Those PDFs are already attached.",
     pending: "Not processed yet",
     footer: "HackNation 2026 project for the Public Procurement Office",
-    modeName: { regular: "regular processing", bielik: "Bielik" },
+    modeName: { regular: "regular processing", bielik: "Bielik", bielik_only: "Bielik only" },
   },
 };
 
@@ -145,6 +161,7 @@ const state = {
   nextId: 1,
   notice: null,
   busy: false,
+  normalise: true,
 };
 
 langButtons.forEach((button) => {
@@ -153,6 +170,15 @@ langButtons.forEach((button) => {
 
 modeButtons.forEach((button) => {
   button.addEventListener("click", () => selectMode(button.dataset.mode));
+});
+
+if (new URLSearchParams(location.search).get("nocache") === "1") {
+  nocacheBox.checked = true;
+}
+
+normaliseBox.addEventListener("change", () => {
+  state.normalise = normaliseBox.checked;
+  renderOutputs();
 });
 
 dropzone.addEventListener("click", (event) => {
@@ -243,6 +269,10 @@ function renderNotice() {
     inputMessage.textContent = "";
     return;
   }
+  if (state.notice.text) {
+    inputMessage.textContent = state.notice.text;
+    return;
+  }
   const names = state.notice.names ? state.notice.names.join(", ") : "";
   inputMessage.textContent = t(state.notice.key).replace("{names}", names);
 }
@@ -271,7 +301,7 @@ async function addFiles(fileListLike) {
   let added = 0;
 
   for (const file of incoming) {
-    if (!isPdf(file)) {
+    if (!(await isPdf(file))) {
       rejected.push(file.name);
       continue;
     }
@@ -291,10 +321,10 @@ async function addFiles(fileListLike) {
     added += 1;
   }
 
-  if (empty.length > 0) {
+  if (rejected.length > 0) {
+    state.notice = { text: rejected.map((name) => `Rejected: ${name} – not a PDF`).join("\n") };
+  } else if (empty.length > 0) {
     state.notice = { key: "emptyFiles", names: empty };
-  } else if (rejected.length > 0) {
-    state.notice = { key: "pdfOnly", names: rejected };
   } else if (added === 0) {
     state.notice = { key: "already" };
   } else {
@@ -305,9 +335,10 @@ async function addFiles(fileListLike) {
   renderFiles();
 }
 
-function isPdf(file) {
-  const name = file.name.toLowerCase();
-  return file.type === "application/pdf" || name.endsWith(".pdf");
+async function isPdf(file) {
+  if (!file.name.toLowerCase().endsWith(".pdf")) return false;
+  const bytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+  return bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
 }
 
 function renderFiles() {
@@ -360,6 +391,7 @@ async function submitFiles() {
 
   const form = new FormData();
   form.append("mode", mode);
+  if (nocacheBox.checked) form.append("nocache", "1");
   selected.forEach((item) => form.append("files", item.file, item.file.name));
   try {
     const response = await fetch(`${apiBase()}/api/extract/batch`, { method: "POST", body: form });
@@ -370,6 +402,8 @@ async function submitFiles() {
       results: body.results || [],
       servedMode: body.mode || null,
       usage: body.usage || null,
+      elapsed: body.elapsed_seconds,
+      perFile: body.seconds_per_file,
     });
     state.files = [];
   } catch {
@@ -397,15 +431,33 @@ function renderOutputs() {
     text.className = "summary-text";
     text.textContent = summarySentence(recognized, unrecognized, failed);
     summary.append(text);
+    if (Number.isFinite(Number(latest.elapsed))) {
+      const timing = document.createElement("p");
+      timing.className = "summary-text";
+      timing.textContent = t("timing")
+        .replace("{seconds}", Number(latest.elapsed).toFixed(1))
+        .replace("{average}", Number(latest.perFile).toFixed(1));
+      summary.append(timing);
+    }
+    latest.results
+      .filter((item) => item.status === "rejected")
+      .forEach((item) => {
+        const line = document.createElement("p");
+        line.className = "message";
+        line.textContent = item.error || `Rejected: ${item.filename} – not a PDF`;
+        summary.append(line);
+      });
     const note = document.createElement("p");
     note.className = "summary-text";
-    if (latest.servedMode === "bielik") {
+    if (latest.servedMode === "bielik" || latest.servedMode === "bielik_only") {
       const usage = latest.usage || {};
       const prompt = Number(usage.prompt_tokens) || 0;
       const completion = Number(usage.completion_tokens) || 0;
-      note.textContent = `${t("bielikUsed")} · ${t("tokens")} ${prompt + completion} (${t("promptTokens")} ${prompt}, ${t("completionTokens")} ${completion})`;
+      const calls = Number(usage.calls) || 0;
+      const label = latest.servedMode === "bielik_only" ? t("modeBielikOnly") : t("bielikUsed");
+      note.textContent = `${label} · ${t("tokens")} ${prompt + completion} (${t("promptTokens")} ${prompt}, ${t("completionTokens")} ${completion}) · ${t("llmCalls")} ${calls}`;
       summary.append(note);
-    } else if (latest.mode === "bielik") {
+    } else if (latest.mode === "bielik" || latest.mode === "bielik_only") {
       note.className = "placeholder";
       note.textContent = t("bielikNote");
       summary.append(note);
@@ -416,7 +468,9 @@ function renderOutputs() {
   if (!latest) {
     detail.append(placeholder("fieldsEmpty"));
   } else {
-    latest.results.forEach((item) => detail.append(renderResult(item)));
+    latest.results
+      .filter((item) => item.status !== "rejected")
+      .forEach((item, index) => detail.append(renderResult(item, index === 0)));
   }
 
   resultsBody.replaceChildren();
@@ -456,10 +510,11 @@ function typeLabel(documentType) {
   return t("types")[documentType] || t("types").unknown;
 }
 
-function renderResult(item) {
-  const article = document.createElement("article");
+function renderResult(item, open) {
+  const article = document.createElement("details");
   article.className = "result";
-  const heading = document.createElement("h3");
+  article.open = open;
+  const heading = document.createElement("summary");
   const sizeLabel = Number.isFinite(item.size) ? ` · ${formatSize(item.size)}` : "";
   heading.textContent = `${item.filename}${sizeLabel} — ${typeLabel(item.document_type)}`;
   if (item.status === "unrecognized" || item.status === "error") heading.append(uncertainMark());
@@ -476,7 +531,7 @@ function renderResult(item) {
     note.textContent = item.error || t("statuses").error;
     article.append(note);
   } else {
-    article.append(renderFields(item.result, item.sources || {}));
+    article.append(renderFields(item.result, item.sources || {}, item.review || {}));
   }
 
   if (item.warnings && item.warnings.length) {
@@ -489,7 +544,8 @@ function renderResult(item) {
   const raw = document.createElement("pre");
   raw.className = "json-view";
   raw.hidden = true;
-  raw.textContent = JSON.stringify(item.result, null, 2);
+  const json = () => JSON.stringify(state.normalise ? item.result : (item.raw || item.result), null, 2);
+  raw.textContent = json();
   article.append(raw);
 
   const actions = document.createElement("div");
@@ -508,6 +564,7 @@ function renderResult(item) {
   copy.textContent = t("copyJson");
   copy.addEventListener("click", async () => {
     try {
+      raw.textContent = json();
       await navigator.clipboard.writeText(raw.textContent);
       copy.textContent = t("copied");
     } catch {
@@ -518,7 +575,7 @@ function renderResult(item) {
   download.type = "button";
   download.className = "btn btn-ghost";
   download.textContent = t("downloadJson");
-  download.addEventListener("click", () => downloadJson(item.filename, raw.textContent));
+  download.addEventListener("click", () => downloadJson(item.filename, json()));
   actions.append(toggle, copy, download);
   article.append(actions);
   return article;
@@ -534,7 +591,7 @@ function uncertainMark() {
   return mark;
 }
 
-function renderFields(value, sources) {
+function renderFields(value, sources, review) {
   const list = document.createElement("div");
   list.className = "field-list";
   Object.entries(flattenFields(value)).forEach(([key, fieldValue]) => {
@@ -552,16 +609,44 @@ function renderFields(value, sources) {
     } else {
       content.textContent = String(fieldValue);
     }
-    if (sources && sources[key]) {
-      const tag = document.createElement("span");
-      tag.className = "source";
-      tag.textContent = sources[key] === "llm" ? t("sourceLlm") : t("sourceRule");
-      content.append(tag);
-    }
+    const tag = sourceBadge(key, sources, review);
+    if (tag) content.append(tag);
     row.append(label, content);
     list.append(row);
   });
   return list;
+}
+
+function sourceBadge(path, sources, review) {
+  const mark = review && review[path];
+  const tag = document.createElement("span");
+  tag.className = "source";
+  if (mark && mark.mark === "agree") {
+    tag.textContent = t("sourceAgree");
+    return tag;
+  }
+  if (mark && mark.mark === "diff") {
+    tag.append(`${t("sourceRule")} (`);
+    const muted = document.createElement("span");
+    muted.className = "bielik-diff";
+    const shown = mark.bielik === null || mark.bielik === undefined ? t("nullValue") : String(mark.bielik);
+    muted.textContent = `${t("sourceLlm")}: ${shown}`;
+    tag.append(muted, ")");
+    return tag;
+  }
+  if (mark && mark.mark === "llm") {
+    tag.textContent = t("sourceLlm");
+    return tag;
+  }
+  if (mark && mark.mark === "rule") {
+    tag.textContent = t("sourceRule");
+    return tag;
+  }
+  if (sources && sources[path]) {
+    tag.textContent = sources[path] === "llm" ? t("sourceLlm") : t("sourceRule");
+    return tag;
+  }
+  return null;
 }
 
 function flattenFields(value, prefix = "", output = {}) {
