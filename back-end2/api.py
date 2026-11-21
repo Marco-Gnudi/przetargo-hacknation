@@ -9,7 +9,8 @@ import re
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -128,6 +129,16 @@ def _envelope(filename, payload, diagnostic, error):
         "warnings": list(diagnostic["warnings"]) if diagnostic else [],
         "error": error,
     }
+
+
+@app.get("/api/sample/{case}/{filename}")
+def sample_pdf(case: str, filename: str):
+    if not CASE_NAME.fullmatch(case) or Path(filename).name != filename or not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=404, detail="Unknown file.")
+    path = (DATASET / case / filename).resolve()
+    if not path.is_relative_to(DATASET.resolve()) or not path.is_file():
+        raise HTTPException(status_code=404, detail="Unknown file.")
+    return FileResponse(path, media_type="application/pdf", filename=filename)
 
 
 app.mount("/", StaticFiles(directory=FRONTEND, html=True), name="frontend")

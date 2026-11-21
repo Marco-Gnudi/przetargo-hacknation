@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrzetarGO</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=7" />
   </head>
   <body>
     <header class="site-header">
@@ -82,6 +82,12 @@
             <p class="drop-title" data-i18n="dropTitle">Upuść pliki PDF</p>
             <p class="drop-hint" data-i18n="dropHint">albo wskaż je na komputerze. Jeden lub więcej plików PDF.</p>
           </div>
+          <p class="drop-note" data-i18n="dropNote">Możesz upuścić dowolny PDF z dysku. Plik w oknie wyboru musi mieć rozmiar większy niż zero.</p>
+          <p class="sample-downloads">
+            <a href="/api/sample/przyklad_01/odwolanie.pdf" download="odwolanie.pdf">odwolanie.pdf</a>
+            <a href="/api/sample/przyklad_01/pelnomocnictwo.pdf" download="pelnomocnictwo.pdf">pelnomocnictwo.pdf</a>
+            <a href="/api/sample/przyklad_01/potwierdzenie_przelewu.pdf" download="potwierdzenie_przelewu.pdf">potwierdzenie_przelewu.pdf</a>
+          </p>
           <input id="file-input" class="visually-hidden" type="file" accept="application/pdf,.pdf" multiple />
           <p id="input-message" class="message" role="status"></p>
           <ul id="file-list" class="file-list" hidden></ul>
@@ -141,6 +147,6 @@
     <footer class="site-footer">
       <p data-i18n="footer">Hacknation 2026 projekt dla Urzędu Zamówień Publicznych</p>
     </footer>
-    <script src="app.js?v=6"></script>
+    <script src="app.js?v=7"></script>
   </body>
 </html>

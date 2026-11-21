@@ -42,7 +42,8 @@ const copy = {
     noCases: "Brak spraw.",
     processingNow: "Przetwarzanie…",
     apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom back-end2/start.sh.",
-    emptyFiles: "Te pliki mają 0 bajtów na tym komputerze, tak jak w oknie wyboru plików. Wybierz kopie, które mają rozmiar, albo użyj „Wczytaj przykład 01”.",
+    emptyFiles: "Ten plik ma 0 bajtów w oknie wyboru, więc nie ma w nim treści PDF. Pobierz pliki pod polem albo wybierz PDF, przy którym widać rozmiar.",
+    dropNote: "Możesz upuścić dowolny PDF z dysku. Plik w oknie wyboru musi mieć rozmiar większy niż zero.",
     loadExample: "Wczytaj przykład 01",
     filesTotal: "{count} plików · {size}",
     bielikNote: "Model Bielik nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
@@ -97,7 +98,8 @@ const copy = {
     noCases: "No cases yet.",
     processingNow: "Processing…",
     apiError: "The extractor did not respond. Refresh this page. If it still fails, run back-end2/start.sh.",
-    emptyFiles: "These files are 0 bytes on this computer, the same as the file window shows. Choose copies that have a size, or use Load example 01.",
+    emptyFiles: "That file is 0 bytes in the file window, so it has no PDF content. Download the files under the box, or choose a PDF that shows a size.",
+    dropNote: "You can drop any PDF from your disk. In the file window it must show a size above zero.",
     loadExample: "Load example 01",
     filesTotal: "{count} files · {size}",
     bielikNote: "Bielik is not connected. This run used the deterministic extractor.",
@@ -523,19 +525,24 @@ function renderResult(item) {
 }
 
 function renderFields(value) {
-  const list = document.createElement("dl");
+  const list = document.createElement("div");
   list.className = "field-list";
   Object.entries(flattenFields(value)).forEach(([key, fieldValue]) => {
-    const term = document.createElement("dt");
-    term.textContent = key;
-    const description = document.createElement("dd");
+    const row = document.createElement("div");
+    row.className = "field-row";
+    const label = document.createElement("div");
+    label.className = "field-label";
+    label.textContent = key;
+    const content = document.createElement("div");
+    content.className = "field-value";
     if (fieldValue === null) {
-      description.className = "is-null";
-      description.textContent = t("nullValue");
+      content.classList.add("is-null");
+      content.textContent = t("nullValue");
     } else {
-      description.textContent = String(fieldValue);
+      content.textContent = String(fieldValue);
     }
-    list.append(term, description);
+    row.append(label, content);
+    list.append(row);
   });
   return list;
 }
