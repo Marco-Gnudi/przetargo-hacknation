@@ -52,7 +52,13 @@ class ChecksumTests(unittest.TestCase):
         number = "60101010100081362231000000"
         self.assertTrue(nrb_ok(number))
         self.assertEqual(repair_nrb("6O" + number[2:]), number)
-        self.assertIsNone(repair_nrb("12345678901234567890123456"))
+        self.assertEqual(repair_nrb("12345678901234567890123456"), "12345678901234567890123456")
+        self.assertIsNone(repair_nrb("1234567890123456789012345X"))
+
+    def test_ted_number_is_not_joined_like_a_nip(self):
+        cleaned = cleanup_ocr("numer ogłoszenia TED: 999137-2026\nNIP 525-000-81-92")
+        self.assertIn("999137-2026", cleaned)
+        self.assertIn("5250008192", cleaned)
 
     def test_nip_checksum_and_impossible_date(self):
         self.assertTrue(nip_ok("9992956550"))

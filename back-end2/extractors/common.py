@@ -39,6 +39,7 @@ def party_name(block):
             continue
         name = re.split(r"\bul\.|\bKRS\b|\bNIP\b|\bREGON\b", line, maxsplit=1, flags=re.IGNORECASE)[0]
         name = name.strip(" ,;:-*'\"›")
+        name = re.sub(r"\s*\((?:lider|partner)\s+konsorcjum\)\s*$", "", name, flags=re.IGNORECASE)
         if len(name) < 3:
             continue
         return name

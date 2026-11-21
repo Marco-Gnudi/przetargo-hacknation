@@ -1,11 +1,13 @@
-"""OpenAI-compatible client for the Bielik endpoint in backend/.env."""
+"""OpenAI-compatible client for the LLM endpoint (Mistral Small 3.2 on Scaleway by default)."""
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 import re
+import threading
 import time
 from contextvars import ContextVar
 from pathlib import Path
@@ -28,16 +30,30 @@ RETRY_TEXT_CHARS = 8_000
 
 
 logger = logging.getLogger("odwolania.llm")
+_VISION_SLOTS = threading.Semaphore(4)
+_VISION_TIMEOUT = 30.0
 
 
 class LLMAuthError(RuntimeError):
     """The endpoint refused the key or the model. Retrying the next document will not help."""
 
+
 _RUN_USAGE: ContextVar[dict[str, int] | None] = ContextVar("llm_run_usage", default=None)
+_TOTAL_LOCK = threading.Lock()
+_TOTAL_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "seconds": 0.0}
 _SKIP_CACHE: ContextVar[bool] = ContextVar("llm_skip_cache", default=False)
 _DOCUMENT: ContextVar[str] = ContextVar("llm_document", default="")
 _CREDENTIALS: ContextVar[dict[str, str] | None] = ContextVar("llm_credentials", default=None)
 _SETTINGS = ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL")
+# Scaleway Generative APIs serve this Apache 2.0 model from Paris (EU).
+DEFAULT_BASE_URL = "https://api.scaleway.ai/v1"
+DEFAULT_MODEL = "mistral-small-3.2-24b-instruct-2506"
+_ALIASES = {
+    "LLM_API_KEY": "MISTRAL_API_KEY",
+    "LLM_BASE_URL": "MISTRAL_BASE_URL",
+    "LLM_MODEL": "MISTRAL_MODEL",
+}
+_DEFAULTS = {"LLM_BASE_URL": DEFAULT_BASE_URL, "LLM_MODEL": DEFAULT_MODEL}
 
 
 def set_llm_credentials(api_key: str = "", base_url: str = "", model: str = "") -> None:
@@ -51,9 +67,15 @@ def set_llm_credentials(api_key: str = "", base_url: str = "", model: str = "") 
 
 
 def llm_setting(name: str) -> str:
+    """Request value, then LLM_*, then MISTRAL_*, then the built-in default."""
     load_env()
     supplied = _CREDENTIALS.get() or {}
-    return supplied.get(name) or os.environ.get(name, "")
+    return (
+        supplied.get(name)
+        or os.environ.get(name)
+        or os.environ.get(_ALIASES.get(name, ""), "")
+        or _DEFAULTS.get(name, "")
+    )
 
 
 def llm_configured() -> bool:
@@ -62,12 +84,23 @@ def llm_configured() -> bool:
 
 def server_key_configured() -> bool:
     load_env()
-    return bool(os.environ.get("LLM_API_KEY"))
+    return bool(os.environ.get("LLM_API_KEY") or os.environ.get("MISTRAL_API_KEY"))
 
 
 def start_usage() -> None:
     """Begin a fresh token total for this request."""
     _RUN_USAGE.set({"prompt_tokens": 0, "completion_tokens": 0, "calls": 0})
+
+
+def reset_total_usage() -> None:
+    """Zero the process-wide total. Worker threads all add into this one."""
+    with _TOTAL_LOCK:
+        _TOTAL_USAGE.update(prompt_tokens=0, completion_tokens=0, calls=0, seconds=0.0)
+
+
+def total_usage() -> dict[str, int]:
+    with _TOTAL_LOCK:
+        return dict(_TOTAL_USAGE)
 
 
 def current_usage() -> dict[str, int]:
@@ -150,6 +183,22 @@ class LLMClient:
             messages=[{"role": "user", "content": "OK"}],
         )
 
+    def extract_vision(self, prompt: str, images: list[bytes]) -> dict:
+        """Read a scanned page. 30s timeout, one retry, then an empty object."""
+        if not images:
+            return {}
+        content: list[dict] = [{"type": "text", "text": prompt}]
+        for image in images:
+            encoded = base64.b64encode(image).decode("ascii")
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{encoded}"},
+            })
+        parsed = self._vision_attempt(content)
+        if parsed:
+            return parsed
+        return self._vision_attempt(content) or {}
+
     def extract_json(self, prompt: str, text: str) -> dict:
         """Ask for JSON only. One stricter retry on an empty or invalid reply."""
         parsed = self._attempt(prompt, (text or "")[:MAX_TEXT_CHARS], _JSON_ONLY)
@@ -166,18 +215,59 @@ class LLMClient:
             return None
         return parsed or None
 
+    def _vision_attempt(self, content: list[dict]) -> dict | None:
+        delay = 1.0
+        rate_limits = 0
+        while True:
+            try:
+                with _VISION_SLOTS:
+                    raw = self._complete_messages(
+                        [
+                            {"role": "system", "content": _JSON_ONLY},
+                            {"role": "user", "content": content},
+                        ],
+                        timeout=_VISION_TIMEOUT,
+                    )
+            except Exception as exc:
+                if _rate_limited(exc) and rate_limits < 3:
+                    rate_limits += 1
+                    time.sleep(delay)
+                    delay = min(delay * 2, 16)
+                    continue
+                return None
+            try:
+                return parse_json_object(raw) or None
+            except Exception:
+                return None
+
     def _complete(self, prompt: str, text: str, system: str = _JSON_ONLY) -> str:
-        started = time.perf_counter()
-        response = self._client.chat.completions.create(
-            model=self.model,
-            temperature=0,
-            messages=[
+        return self._complete_messages(
+            [
                 {"role": "system", "content": system},
                 {"role": "user", "content": f"{prompt}\n\n{text}"},
-            ],
+            ]
         )
+
+    def _complete_messages(self, messages: list[dict], timeout: float | None = None) -> str:
+        started = time.perf_counter()
+        kwargs = {"model": self.model, "temperature": 0, "messages": messages}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        delay = 1.0
+        rate_limits = 0
+        while True:
+            try:
+                response = self._client.chat.completions.create(**kwargs)
+                break
+            except Exception as exc:
+                if timeout is None and _rate_limited(exc) and rate_limits < 3:
+                    rate_limits += 1
+                    time.sleep(delay)
+                    delay = min(delay * 2, 16)
+                    continue
+                raise
         elapsed = time.perf_counter() - started
-        prompt_tokens, completion_tokens = _record_usage(response)
+        prompt_tokens, completion_tokens = _record_usage(response, elapsed)
         document = _DOCUMENT.get() or "-"
         logger.info(
             "LLM call document=%s prompt_tokens=%d completion_tokens=%d time=%.2fs",
@@ -189,7 +279,13 @@ class LLMClient:
         return response.choices[0].message.content or ""
 
 
-def _record_usage(response: object) -> tuple[int, int]:
+def _rate_limited(exc: Exception) -> bool:
+    if exc.__class__.__name__ == "RateLimitError":
+        return True
+    return getattr(exc, "status_code", None) == 429
+
+
+def _record_usage(response: object, elapsed: float = 0.0) -> tuple[int, int]:
     usage = getattr(response, "usage", None)
     prompt = int(getattr(usage, "prompt_tokens", 0) or 0) if usage is not None else 0
     completion = int(getattr(usage, "completion_tokens", 0) or 0) if usage is not None else 0
@@ -200,6 +296,11 @@ def _record_usage(response: object) -> tuple[int, int]:
     bucket["prompt_tokens"] += prompt
     bucket["completion_tokens"] += completion
     bucket["calls"] = int(bucket.get("calls", 0)) + 1
+    with _TOTAL_LOCK:
+        _TOTAL_USAGE["prompt_tokens"] += prompt
+        _TOTAL_USAGE["completion_tokens"] += completion
+        _TOTAL_USAGE["calls"] += 1
+        _TOTAL_USAGE["seconds"] += elapsed
     return prompt, completion
 
 

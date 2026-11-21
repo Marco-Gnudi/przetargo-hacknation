@@ -28,7 +28,7 @@ TITLES = re.compile(
 
 def clean_text(text):
     text = text.replace("\xa0", " ").replace("\u200b", "").replace("\xad", "")
-    return text
+    return re.sub(r"(?i)</?(?:b|i|u|strong|em|br)\s*/?>", "", text)
 
 
 def collapse_spaced_letters(text):

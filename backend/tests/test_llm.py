@@ -141,6 +141,42 @@ def test_llm_call_log_names_the_document_and_tokens(caplog):
     assert current_usage()["calls"] == 1
 
 
+def test_extract_vision_sends_a_png_and_retries_once():
+    client, completions = _client(["not json", '{"nazwa": "Asterion"}'])
+    parsed = client.extract_vision("szablon", [b"\x89PNG"])
+    assert parsed == {"nazwa": "Asterion"}
+    assert completions.calls == 2
+    call = completions.seen[0]
+    assert call["temperature"] == 0
+    assert call["timeout"] == 30
+    parts = call["messages"][1]["content"]
+    assert parts[0]["type"] == "text"
+    assert parts[1]["type"] == "image_url"
+    assert parts[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_extract_vision_backs_off_on_http_429(monkeypatch):
+    slept = []
+    monkeypatch.setattr("odwolania.llm.time.sleep", lambda seconds: slept.append(seconds))
+
+    class _Limited(_Completions):
+        def create(self, **kwargs):
+            self.seen.append(kwargs)
+            self.calls += 1
+            if self.calls == 1:
+                error = RuntimeError("slow down")
+                error.status_code = 429
+                raise error
+            message = SimpleNamespace(content='{"ok": true}')
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+    completions = _Limited([])
+    client = LLMClient(client=SimpleNamespace(chat=SimpleNamespace(completions=completions)), model="test")
+    assert client.extract_vision("szablon", [b"\x89PNG"]) == {"ok": True}
+    assert completions.calls == 2
+    assert slept == [1.0]
+
+
 def test_extract_json_truncates_text_and_uses_temperature_zero():
     client, completions = _client(['{"ok": true}'])
     text = "ą" * (MAX_TEXT_CHARS + 50)
@@ -150,3 +186,20 @@ def test_extract_json_truncates_text_and_uses_temperature_zero():
     user_message = call["messages"][1]["content"]
     assert "ą" * MAX_TEXT_CHARS in user_message
     assert "ą" * (MAX_TEXT_CHARS + 1) not in user_message
+
+
+def test_vision_transaction_id_drops_a_title_and_keeps_a_reference():
+    from odwolania.llm_extractor import normalise_vision
+
+    prose = normalise_vision("przelew", {"przelew_bankowy": {
+        "numer_transakcji": "PRZELEW ELIXIR - ONLINE",
+    }})
+    account = normalise_vision("przelew", {"przelew_bankowy": {
+        "numer_transakcji": "49 1020 5460 0592 9792 1415 5903",
+    }})
+    kept = normalise_vision("przelew", {"przelew_bankowy": {
+        "numer_transakcji": "CEN9057564440515",
+    }})
+    assert prose["przelew_bankowy"]["numer_transakcji"] is None
+    assert account["przelew_bankowy"]["numer_transakcji"] is None
+    assert kept["przelew_bankowy"]["numer_transakcji"] == "CEN9057564440515"

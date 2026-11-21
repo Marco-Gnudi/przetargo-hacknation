@@ -80,7 +80,7 @@ def _fill_gaps(document, payload):
     if transfer["na_rachunek"] is None and len(accounts) > 1:
         transfer["na_rachunek"] = accounts[1]
     if transfer["numer_transakcji"] is None:
-        transfer["numer_transakcji"] = transaction_id(text)
+        transfer["numer_transakcji"] = _repeated_id(text) or transaction_id(text)
     if transfer["tytul"] is None:
         title = re.search(r"szczeg\S{1,3}y\s+p\S{1,3}atno\S{1,4}\s*:?\s*(.{10,240})", compact(text), re.IGNORECASE)
         title = title or re.search(r"((?:op[łl]ata\s*skarbowa|tytu[łl]).{10,240})", compact(text), re.IGNORECASE)
@@ -99,6 +99,15 @@ def _fill_gaps(document, payload):
     if transfer["data_operacji"] is None:
         transfer["data_operacji"] = _operation_date(text) or _first_date(text)
     return payload
+
+
+def _repeated_id(text):
+    """Banks repeat the reference in the title; a token seen twice is rarely OCR noise."""
+    tokens = re.findall(r"\b(?!PL\d{26}\b)([A-Z]{2,}[A-Z0-9]*\d{6,})\b", text)
+    for token in tokens:
+        if tokens.count(token) > 1:
+            return token
+    return None
 
 
 def _operation_date(text):
@@ -130,6 +139,12 @@ def _trim_title(value):
         flags=re.IGNORECASE,
     )[0]
     trimmed = trimmed.strip(" „”\"'`“”")
+    body = re.search(
+        r"(?i)((?:op[łl]ata\s+skarbowa|wpis\s+od\s+odwo[łl]ania).*)",
+        trimmed,
+    )
+    if body and body.start() > 0 and re.search(r"\d{8,}", trimmed[: body.start()]):
+        trimmed = body.group(1)
     return compact(trimmed).strip(" ,.;") or None
 
 

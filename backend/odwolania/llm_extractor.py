@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from odwolania.config import load_settings
-from odwolania.llm import LLMClient, MAX_TEXT_CHARS, cache_skipped, hosted
+from odwolania.llm import LLMClient, MAX_TEXT_CHARS, cache_skipped, hosted, llm_setting
 
 CACHE_DIR = Path(__file__).resolve().parents[1] / ".cache" / "llm"
 
@@ -157,9 +157,15 @@ def _prompt(doc_type: str) -> str:
     raise ValueError(f"No llm_prompt for {doc_type}")
 
 
+def _env_model() -> str:
+    """Model name for the cache key, so replies from different models never mix."""
+    return llm_setting("LLM_MODEL")
+
+
 def _cached_json(prompt: str, text: str, client: LLMClient | None, cache_dir: Path) -> dict:
     clipped = text[:MAX_TEXT_CHARS]
-    digest = hashlib.sha256(f"{prompt}\0{clipped}".encode("utf-8")).hexdigest()
+    model_name = getattr(client, "model", "") if client is not None else _env_model()
+    digest = hashlib.sha256(f"{model_name}\0{prompt}\0{clipped}".encode("utf-8")).hexdigest()
     path = cache_dir / f"{digest}.json"
     # A shared server must not hand one visitor's document data to another.
     shared = hosted()
@@ -191,6 +197,37 @@ def _shape(doc_type: str, raw: dict, *, normalise: bool, text: str = "") -> dict
     if normalise and _from_ocr():
         _reject_bad_ids(shaped)
     return shaped
+
+
+def normalise_vision(doc_type: str, raw: dict) -> dict:
+    """Shape a vision reply and drop identifiers that fail their check digit.
+
+    Unlike the text extractor, a value does not have to occur in the OCR string.
+    """
+    if doc_type not in _SCHEMAS:
+        return {}
+    payload = raw if isinstance(raw, dict) else {}
+    if doc_type == "pelnomocnictwo":
+        payload = _nest_signers(payload)
+        payload = _lift_attorneys(payload)
+    shaped = _apply(_SCHEMAS[doc_type], payload, normalise=True)
+    _reject_bad_ids(shaped)
+    if doc_type == "przelew":
+        body = shaped.get("przelew_bankowy") or {}
+        body["numer_transakcji"] = _vision_transaction_id(body.get("numer_transakcji"))
+    return shaped
+
+
+def _vision_transaction_id(value: object):
+    """A vision reply may paste the title or the account into the transaction id."""
+    import sys
+
+    root = Path(__file__).resolve().parents[2] / "back-end2"
+    if str(root) not in sys.path:
+        sys.path.append(str(root))
+    from normalizers import transaction_id
+
+    return transaction_id(None if value is None else str(value))
 
 
 def _from_ocr() -> bool:

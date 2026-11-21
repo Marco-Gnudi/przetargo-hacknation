@@ -16,8 +16,8 @@ def extract_odwolanie(document, rules):
     appellant_block = section(text, r"Odwo[łl]uj[aą]c\w*\s*:", party_end)
     authority_block = section(text, r"Zamawiaj[aą]c\w*\s*(?:\(|:)", party_end)
     procurement = _procurement_window(flat)
-    act = _act_window(flat)
-    powod_id, powod_opis = _powod(act, rules["powod"])
+    act, first_charge = _act_window(flat)
+    powod_id, powod_opis = _powod(act, rules["powod"], first_charge=first_charge)
     city, appeal_date = _header_place_date(text)
     return {
         "OdwolanieKIO": {
@@ -43,12 +43,29 @@ def _appellant(block, ocr=False):
     representative = _representative(block)
     return {
         "krs": ids["krs"],
-        "nazwa": party_name(block),
+        "nazwa": _appellant_name(block),
         "nip": ids["nip"],
         "regon": ids["regon"],
         "przez-pelnomocnika": 1 if representative["imie_nazwisko"] or representative["nazwa"] else 0,
         "pelnomocnik": representative,
     }
+
+
+def _appellant_name(block):
+    """A sole trader's name is the person plus the firm, without the boilerplate."""
+    name = party_name(block)
+    firm = re.search(r"pod firm[aą]\s+(.+?)(?:,|\s+ul\b)", compact(block), re.IGNORECASE)
+    if not firm or not name:
+        return name
+    person = re.split(r"\s+prowadz", name, maxsplit=1, flags=re.IGNORECASE)[0].strip(" ,")
+    trade = compact(firm.group(1))
+    trade = re.split(r"\s+reprezentowan|\s+adres\b", trade, maxsplit=1, flags=re.IGNORECASE)[0]
+    trade = trade.strip(" ,.;")
+    if not person or not trade or trade.casefold() == person.casefold():
+        return name
+    if trade.casefold().startswith(person.casefold()):
+        return trade
+    return f"{person} {trade}"
 
 
 def _representative(block):
@@ -95,6 +112,7 @@ def _law_firm(block):
     if not match:
         return None
     firm = match.group(1).strip(" ,.;'\"")
+    firm = re.sub(r"^\d+\s+", "", firm)
     return firm.title() if firm.isupper() else firm
 
 
@@ -189,19 +207,40 @@ def _act_date(act, flat=""):
 
 
 def _act_window(flat):
-    """Text PDFs put the act just before "zarzut nr 1". Scans bury that heading."""
+    """Text PDFs put the act just before "zarzut nr 1". Scans bury that heading.
+
+    The official code is the first charge only. A later "unieważnienie" must not win.
+    """
     match = re.search(r"(.{0,500})\s+zarzut\s+nr\s*1\b", flat, re.IGNORECASE)
     if match:
-        return match.group(1)
+        return match.group(1), False
     filed = re.search(
-        r"wnosz\w*\s+odwo[łl]an\w+\s+(.{0,700})",
+        r"wnosz\w*\s+odwo[łl]an\w+\s+(.{0,900})",
         flat,
         re.IGNORECASE,
     )
     if filed:
-        return filed.group(1)
+        return _first_charge(filed.group(1)), True
     later = re.search(r"(.{0,900})\s+zarzut\w*\s+nr\s*[1lI]\b", flat, re.IGNORECASE)
-    return later.group(1) if later else ""
+    return (later.group(1) if later else ""), False
+
+
+def _first_charge(chunk):
+    match = re.search(
+        r"(?:1[\.\)]|I\.)\s*(.{10,500}?)(?=\s*(?:;|,)?\s*(?:2[\.\)]|II\.))",
+        chunk,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if match:
+        return match.group(1)
+    return chunk[:400]
+
+
+_FOLD = str.maketrans("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", "acelnoszzACELNOSZZ")
+_SCAN_PATTERN = {
+    5: "|modyfikacj\\w+\\s+tresci\\s+swz",
+    6: "|odpowiedzi\\s*/\\s*wyjasnienia|odpowiedzi\\s+na\\s+pytania|wyjasnien\\w*(?:\\s+\\w+){0,4}\\s+swz",
+}
 
 
 def _header_place_date(text):
@@ -214,9 +253,19 @@ def _header_place_date(text):
     return match.group(1), parse_date(match.group(2))
 
 
-def _powod(act, rules):
-    lowered = act.lower()
+def _powod(act, rules, first_charge=False):
+    if not first_charge:
+        lowered = act.lower()
+        for rule in rules:
+            if re.search(rule["pattern"], lowered, re.IGNORECASE):
+                return rule["id"], rule["opis"]
+        return None, None
+    lowered = act.translate(_FOLD).lower()
     for rule in rules:
-        if re.search(rule["pattern"], lowered, re.IGNORECASE):
-            return rule["id"], rule["opis"]
+        pattern = rule["pattern"].translate(_FOLD) + _SCAN_PATTERN.get(rule["id"], "")
+        if re.search(pattern, lowered, re.IGNORECASE):
+            opis = rule["opis"]
+            if rule["id"] == 6:
+                opis = "Odpowiedzi/wyjaśnienia do SWZ"
+            return rule["id"], opis
     return None, None

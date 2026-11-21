@@ -38,7 +38,8 @@ def extract_bielik_only(pdf_path: Path) -> tuple[dict, str, dict[str, str], dict
     if not processed.document_type:
         return {}, "unknown", {}, {}
     raw = processed.raw if processed.raw is not None else processed.data
-    return processed.data, processed.document_type, processed.sources, raw
+    data = _with_vision(pdf_path, processed.data, processed.document_type)
+    return data, processed.document_type, processed.sources, raw
 
 
 def fill_with_bielik(
@@ -50,7 +51,8 @@ def fill_with_bielik(
     """
     from odwolania.pipeline import process_file
 
-    processed = process_file(Path(pdf_path), mode="bielik")
+    known = document_type if document_type != "unknown" else None
+    processed = process_file(Path(pdf_path), mode="bielik", document_type=known)
     bielik = _llm_leaves(processed.data, processed.sources)
     raw_model = processed.raw if processed.raw is not None else processed.data
     if document_type == "unknown":
@@ -58,12 +60,21 @@ def fill_with_bielik(
             return payload, document_type, {}, {}, payload
         sources: dict[str, str] = {}
         _tag(processed.data, sources, "llm", "")
-        return processed.data, processed.document_type, sources, bielik, raw_model
+        data = _with_vision(pdf_path, processed.data, processed.document_type)
+        return data, processed.document_type, sources, bielik, raw_model
     if processed.document_type != document_type:
-        return payload, document_type, tag_rules(payload), {}, payload
+        kept = _with_vision(pdf_path, payload, document_type)
+        return kept, document_type, tag_rules(kept), {}, payload
     merged, sources = merge_payload(payload, processed.data, processed.sources)
     raw_merged, _ = merge_payload(payload, raw_model, processed.sources)
+    merged = _with_vision(pdf_path, merged, document_type)
     return merged, document_type, sources, bielik, raw_merged
+
+
+def _with_vision(pdf_path, payload: dict, document_type: str) -> dict:
+    from vision_fill import apply_vision
+
+    return apply_vision(pdf_path, payload, document_type)
 
 
 def review_marks(final: dict, sources: dict[str, str], bielik: dict[str, object]) -> dict[str, dict]:
