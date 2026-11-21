@@ -52,6 +52,17 @@ def read_pdf(path):
     return document
 
 
+def forget_pdf(path) -> None:
+    """Drop cached reads of a temporary upload so a shared server does not keep its text."""
+    resolved = str(Path(path).resolve())
+    for key in [key for key in _CACHE if key[0] == resolved]:
+        del _CACHE[key]
+
+
+def _disk_cache_enabled() -> bool:
+    return os.environ.get("PRZETARGO_HOSTED", "").strip().lower() not in ("1", "true", "yes", "on")
+
+
 def _read(path: Path) -> PdfDocument:
     pdf = pymupdf.open(path)
     pages = []
@@ -64,7 +75,7 @@ def _read(path: Path) -> PdfDocument:
     if not _layer_is_short(pages):
         pdf.close()
         return PdfDocument(str(path), pages, layer, False, False, "text", 0.0)
-    cached = _load_ocr_cache(path)
+    cached = _load_ocr_cache(path) if _disk_cache_enabled() else None
     if cached is not None:
         pdf.close()
         return PdfDocument(str(path), pages, cached["text"], False, True, "ocr", cached["seconds"])
@@ -75,7 +86,8 @@ def _read(path: Path) -> PdfDocument:
     if not ocr_text.strip():
         return PdfDocument(str(path), pages, layer, True, False, "text", elapsed)
     cleaned = collapse_spaced_letters(cleanup_ocr(ocr_text))
-    _save_ocr_cache(path, cleaned, elapsed)
+    if _disk_cache_enabled():
+        _save_ocr_cache(path, cleaned, elapsed)
     return PdfDocument(str(path), pages, cleaned, False, True, "ocr", elapsed)
 
 
