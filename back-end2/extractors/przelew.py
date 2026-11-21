@@ -68,29 +68,45 @@ def _fill_gaps(text, payload):
         if title:
             transfer["tytul"] = _trim_title(compact(title.group(1)))
     if transfer["kwota"] is None:
-        match = re.search(r"kwota[^0-9]{0,40}(\d[\d\s.,]{1,15})", text, re.IGNORECASE)
+        match = re.search(
+            r"(?:kwocie|kwotę|kwoty|kwota)\s+(\d[\d\s]*[.,]\d{2})",
+            text,
+            re.IGNORECASE,
+        )
         if match:
             transfer["kwota"] = amount(match.group(1))
     if transfer["data_operacji"] is None:
-        for line in text.splitlines():
-            if re.search(r"wydruk|wygenerow", line, re.IGNORECASE):
-                continue
-            parsed = parse_date(line)
-            if parsed:
-                transfer["data_operacji"] = parsed
-                break
+        transfer["data_operacji"] = _operation_date(text) or _first_date(text)
     return payload
+
+
+def _operation_date(text):
+    match = re.search(r"w dniu\s+(.{6,32}?)(?:\s+z\b|,)", text, re.IGNORECASE)
+    if not match:
+        return None
+    return parse_date(match.group(1))
+
+
+def _first_date(text):
+    for line in text.splitlines():
+        if re.search(r"wydruk|wygenerow", line, re.IGNORECASE):
+            continue
+        parsed = parse_date(line)
+        if parsed:
+            return parsed
+    return None
 
 
 def _trim_title(value):
     if not value:
         return None
     trimmed = re.split(
-        r"\b(?:typ operacji|kanał|potwierdzenie ma charakter|bank nie ponosi|status)\b",
+        r"\b(?:typ operacji|kanał|potwierdzenie ma charakter|bank nie ponosi|status|numer referencyjny|numer transakcji|nr ref\.?|waluta|tryb|data wygenerowania|z poważaniem)\b",
         value,
         maxsplit=1,
         flags=re.IGNORECASE,
     )[0]
+    trimmed = trimmed.strip(" „”\"'`“”")
     return compact(trimmed).strip(" ,.;") or None
 
 

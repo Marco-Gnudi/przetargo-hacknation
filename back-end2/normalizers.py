@@ -106,6 +106,7 @@ def person_name(value):
     if not value:
         return None
     name = TITLES.sub("", value)
+    name = re.sub(r"\s+(?:nr|pesel)\b.*$", "", name, flags=re.IGNORECASE)
     name = name.replace("(", " ").replace(")", " ")
     name = compact(name).strip(" ,.;:-")
     parts = name.split(" ")
