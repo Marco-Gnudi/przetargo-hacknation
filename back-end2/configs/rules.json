@@ -58,7 +58,7 @@
     {"field": "kwota", "pattern": "^(?:kwota operacji|kwota przelewu|kwota|wartość)$"},
     {"field": "data_operacji", "pattern": "^(?:data transakcji|data realizacji|data wykonania|data operacji|data przelewu)$"},
     {"field": "tytul", "pattern": "^(?:tytuł przelewu|tytuł|tytułem|opis)$"},
-    {"field": "numer_transakcji", "pattern": "^(?:nr ref\\.?|identyfikator operacji|numer referencyjny|numer transakcji|numer operacji)$"}
+    {"field": "numer_transakcji", "pattern": "^(?:nr ref\\.?|identyfikator operacji|numer referencyjny|numer transakcji|numer operacji)(?:\\s+\\w+){0,2}$"}
   ],
-  "transfer_stop": "^(?:zrealizowano|status|opłata/prowizja|prowizja)$"
+  "transfer_stop": "^(?:zrealizowano|status|opłata/prowizja|prowizja|waluta|tryb|kanał|typ operacji|data wygenerowania|z poważaniem)$"
 }

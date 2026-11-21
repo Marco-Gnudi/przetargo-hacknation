@@ -74,7 +74,7 @@ def _legal_name(block):
     flat = compact(block)
     match = re.search(r"Mocodawc[aą]\s+jest\s+(.+?)(?:,|\s+ul\.)", flat, re.IGNORECASE)
     if match:
-        return compact(match.group(1))
+        return _without_heading(compact(match.group(1)))
     pattern = re.compile(
         r"([A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż.&'-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż.&'-]*){0,6}\s+"
         r"(?:S\.A\.|sp\.\s*z\s*o\.o\.(?:\s*sp\.\s*k\.)?|sp\.\s*k\.|sp\.\s*j\.))",
@@ -82,9 +82,20 @@ def _legal_name(block):
     for found in pattern.finditer(flat):
         name = compact(found.group(1))
         name = re.sub(r"^.*\b(?:imieniu|Pełnomocnictwo(?:\s+procesowe)?)\s+", "", name, flags=re.IGNORECASE)
+        name = _without_heading(name)
         if re.search(r"\b(?:S\.A\.|sp\.)", name):
             return name.strip(" ,;")
     return None
+
+
+def _without_heading(name):
+    cleaned = re.sub(
+        r"^(?:mocodawca|pełnomocnik|pełnomocnictwo)\b\s*",
+        "",
+        name,
+        flags=re.IGNORECASE,
+    )
+    return cleaned.strip(" ,;:")
 
 
 def _signatories(text):
@@ -115,20 +126,12 @@ def _signatories(text):
 
 
 def _agents(flat):
-    window = flat
-    match = re.search(
-        r"(?:pełnomocnik(?:iem|a|ów)?|pełnomocnictwa)\s*[:,]?\s*(.+?)(?:pełnomocnictwo dotyczy|pełnomocnictwo udzielone|zakres|§\s*3|$)",
-        flat,
-        re.IGNORECASE,
-    )
-    if match:
-        window = match.group(1)
     found = []
     pattern = re.compile(
-        r"(?:r\.\s*pr\.|adw\.|radca prawny|adwokat)\s+([A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż-]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż-]+){1,2})",
-        re.IGNORECASE,
+        r"(?i:r\.\s*pr\.|adw\.|radc[aą]\s+prawn\w+|adwokat)\s+"
+        r"([A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż'-]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż'-]+){1,2})"
     )
-    for name_match in pattern.finditer(window):
+    for name_match in pattern.finditer(flat):
         name = person_name(name_match.group(1))
         if name and name not in found:
             found.append(name)
@@ -145,7 +148,11 @@ def _pesel(flat):
 
 
 def _role_line(line):
-    return bool(re.match(r"^(?:prezes|wiceprezes|członek|prokurent|zarząd)", line, re.IGNORECASE))
+    return bool(re.match(
+        r"^(?:prezes|wiceprezes|członek|prokurent|dyrektor|wicedyrektor|zarząd)\b",
+        line,
+        re.IGNORECASE,
+    ))
 
 
 def _looks_like_company(name):

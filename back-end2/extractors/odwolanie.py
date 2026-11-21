@@ -9,8 +9,11 @@ from normalizers import bzp_number, compact, parse_date, person_name, ted_number
 def extract_odwolanie(document, rules):
     text = document.text
     flat = document.flat
-    appellant_block = section(text, r"Odwołując\w*\s*:", r"\n\s*Zamawiając")
-    authority_block = section(text, r"Zamawiając\w*", r"\n\s*(?:ODWOŁANIE|dotyczy\s*:)")
+    party_end = (
+        r"\n\s*(?:Odwołując\w*\s*:|Zamawiając\w*\s*:|Wykonawca wybrany\b|dotyczy\s*:|ODWOŁANIE\b)"
+    )
+    appellant_block = section(text, r"Odwołując\w*\s*:", party_end)
+    authority_block = section(text, r"Zamawiając\w*\s*(?:\(|:)", party_end)
     procurement = _procurement_window(flat)
     act = _act_window(flat)
     powod_id, powod_opis = _powod(act, rules["powod"])
