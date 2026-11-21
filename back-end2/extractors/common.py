@@ -21,7 +21,7 @@ def party_name(block):
         block = chunks[0]
     lines = [compact(line) for line in block.splitlines() if compact(line)]
     skipped = re.compile(
-        r"^(?:odwołując\w*|zamawiając\w*|mocodawc\w*|pełnomocni\w*|\d+\)|ul\.|krs\b|nip\b|regon\b|tel\.|e-?mail\b|kontakt\b|adres\b|reprezentowan|przedsiębiorca\b|wpisan\w*|prowadząc)",
+        r"^(?:odwo[łl]uj[aą]c\w*|zamawiaj[aą]c\w*|mocodawc\w*|pe[łl]nomocni\w*|\d+\)|ul\.|krs\b|nip\b|regon\b|tel\.|e-?mail\b|kontakt\b|adres\b|reprezentowan|przedsi[eę]biorca\b|wpisan\w*|prowadz[aą]c)",
         re.IGNORECASE,
     )
     for line in lines:
@@ -36,7 +36,7 @@ def party_name(block):
         if re.search(r"art\.\s*\d+", line, re.IGNORECASE):
             continue
         name = re.split(r"\bul\.|\bKRS\b|\bNIP\b|\bREGON\b", line, maxsplit=1, flags=re.IGNORECASE)[0]
-        name = name.strip(" ,;:-")
+        name = name.strip(" ,;:-*'\"›")
         if len(name) < 3:
             continue
         return name

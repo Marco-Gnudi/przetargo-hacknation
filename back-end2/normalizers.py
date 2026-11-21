@@ -1,6 +1,7 @@
 """Normalize dates, identifiers, amounts, and person names."""
 
 import re
+from datetime import datetime
 
 MONTHS = {
     "stycznia": 1,
@@ -50,16 +51,25 @@ def parse_date(value):
         return None
     text = compact(value).lower().rstrip(".")
     match = re.search(r"(\d{4})-(\d{2})-(\d{2})", text)
-    if match:
+    if match and _real_date(*match.groups()):
         return "-".join(match.groups())
     match = re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})", text)
     if match:
         day, month, year = match.groups()
-        return f"{year}-{int(month):02d}-{int(day):02d}"
+        if _real_date(year, month, day):
+            return f"{year}-{int(month):02d}-{int(day):02d}"
     match = re.search(r"(\d{1,2})\s+([a-ząćęłńóśźż]+)\s+(\d{4})", text)
-    if match and match.group(2) in MONTHS:
+    if match and match.group(2) in MONTHS and _real_date(match.group(3), MONTHS[match.group(2)], match.group(1)):
         return f"{match.group(3)}-{MONTHS[match.group(2)]:02d}-{int(match.group(1)):02d}"
     return None
+
+
+def _real_date(year, month, day):
+    try:
+        datetime(int(year), int(month), int(day))
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def digits(value):
@@ -122,6 +132,9 @@ def bzp_number(value):
         return None
     match = re.search(r"(\d{4})\s*/\s*BZP\s*(\d+)(?:\s*/\s*(\d+))?", value, re.IGNORECASE)
     if not match:
+        # OCR reads the B in BZP as 8.
+        match = re.search(r"(\d{4})\s*/\s*8ZP\s*(\d+)(?:\s*/\s*(\d+))?", value, re.IGNORECASE)
+    if not match:
         return None
     number = f"{match.group(1)}/BZP{match.group(2)}"
     if match.group(3):
@@ -138,6 +151,10 @@ def ted_number(value):
     match = re.search(r"\b(\d{5,7})\s*-\s*(\d{4})\b", value)
     if match:
         return f"{match.group(1)}-{match.group(2)}"
+    # Scans drop the hyphen: "nr 5706282026".
+    match = re.search(r"\bnr\s+(\d{6})(\d{4})\b", value)
+    if match:
+        return f"{match.group(1)}-{match.group(2)}"
     return None
 
 
@@ -145,6 +162,11 @@ def email(value):
     if not value:
         return None
     match = re.search(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", value)
+    if match:
+        return match.group(0)
+    # Tesseract often reads "@" as a capital G. Require a domain so "REGON" stays intact.
+    repaired = re.sub(r"(?<=[\w.])G(?=[\w.-]+\.[A-Za-z]{2,}\b)", "@", value, count=1)
+    match = re.search(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", repaired)
     return match.group(0) if match else None
 
 

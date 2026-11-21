@@ -136,6 +136,12 @@ def extract(
     if doc_type not in _SCHEMAS:
         raise ValueError(f"No LLM schema for {doc_type}")
     prompt = _prompt(doc_type)
+    if _from_ocr():
+        prompt += (
+            "\n\nTekst pochodzi z OCR i może zawierać błędne znaki. "
+            "Popraw oczywiste literówki w nazwach i adresach. "
+            "Liczby, daty i numery rachunków przepisz dokładnie tak, jak je widać."
+        )
     source = text or ""
     sent = _przelew_window(source) if doc_type == "przelew" else source
     model = _cached_json(prompt, sent, client, cache_dir if cache_dir is not None else CACHE_DIR)
@@ -180,7 +186,49 @@ def _shape(doc_type: str, raw: dict, *, normalise: bool, text: str = "") -> dict
         _finish_pelnomocnictwo(shaped)
     elif doc_type == "przelew":
         _finish_przelew(shaped, text)
+    if normalise and _from_ocr():
+        _reject_bad_ids(shaped)
     return shaped
+
+
+def _from_ocr() -> bool:
+    from odwolania.pdf_reader import OCR_TEXT
+
+    return bool(OCR_TEXT.get())
+
+
+def _reject_bad_ids(data: dict) -> None:
+    """A wrong identifier is a false positive and a false negative. Null is only a miss."""
+    import sys
+
+    root = Path(__file__).resolve().parents[2] / "back-end2"
+    if str(root) not in sys.path:
+        sys.path.append(str(root))
+    from checksums import repair_nip, repair_nrb, repair_pesel, repair_regon
+
+    repair = {
+        "nip": repair_nip,
+        "regon": repair_regon,
+        "pesel": repair_pesel,
+        "na_rachunek": repair_nrb,
+        "z_rachunku": repair_nrb,
+    }
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in repair and value:
+                    node[key] = repair[key](value)
+                elif key == "krs" and value:
+                    digits = re.sub(r"\D", "", str(value))
+                    node[key] = digits if len(digits) == 10 else None
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(data)
 
 
 def _apply(spec: object, raw: object, *, normalise: bool) -> object:

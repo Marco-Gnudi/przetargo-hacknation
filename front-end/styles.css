@@ -550,6 +550,18 @@ th {
   color: var(--red);
 }
 
+.ocr-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
 .result + .result {
   margin-top: 18px;
   padding-top: 16px;

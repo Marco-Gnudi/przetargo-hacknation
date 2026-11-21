@@ -25,7 +25,7 @@ def process_pdf(path, rules=None):
     if document.needs_ocr:
         warnings.append("No usable text layer and OCR did not run.")
     if document.ocr_used:
-        warnings.append("Text came from the optional Tesseract fallback.")
+        warnings.append(f"Text came from OCR ({document.ocr_seconds:.1f} s).")
     try:
         if document_type == "unknown":
             payload = {}
@@ -43,5 +43,7 @@ def process_pdf(path, rules=None):
         "reason": decision["reason"],
         "scores": decision["scores"],
         "warnings": warnings,
+        "text_source": document.text_source,
+        "ocr_seconds": document.ocr_seconds,
     }
     return payload, diagnostic

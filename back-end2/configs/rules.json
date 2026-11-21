@@ -53,12 +53,12 @@
     {"id": 4, "opis": "Publikacja specyfikacji warunków zamówienia (SWZ)", "pattern": "opublikowa\\w+|specyfikacj\\w+ warunków zamówienia"}
   ],
   "transfer_labels": [
-    {"field": "z_rachunku", "pattern": "^(?:z rachunku|rachunek obciążany|rachunek zleceniodawcy|rachunek nadawcy)$"},
-    {"field": "na_rachunek", "pattern": "^(?:rachunek odbiorcy|rachunek uznawany|rachunek beneficjenta|na rachunek)$"},
-    {"field": "kwota", "pattern": "^(?:kwota operacji|kwota przelewu|kwota|wartość)$"},
-    {"field": "data_operacji", "pattern": "^(?:data transakcji|data realizacji|data wykonania|data operacji|data przelewu)$"},
-    {"field": "tytul", "pattern": "^(?:tytuł przelewu|tytuł|tytułem|opis)$"},
-    {"field": "numer_transakcji", "pattern": "^(?:nr ref\\.?|identyfikator operacji|numer referencyjny|numer transakcji|numer operacji)(?:\\s+\\w+){0,2}$"}
+    {"field": "z_rachunku", "pattern": "^(?:z\\s*rachunku|rachunek\\s*obci[aą][żz]any|rachunek\\s*zleceniodawcy|rachunek\\s*nadawcy)$"},
+    {"field": "na_rachunek", "pattern": "^(?:rachunek\\s*odbiorcy|rachunek\\s*uznawany|rachunek\\s*beneficjenta|na\\s*rachunek)$"},
+    {"field": "kwota", "pattern": "^(?:kwota\\s*operacji|kwota\\s*przelewu|kwota|warto[śs][ćc])$"},
+    {"field": "data_operacji", "pattern": "^(?:data\\s*transakcji|data\\s*realizacji|data\\s*wykonania|data\\s*operacji|data\\s*przelewu)$"},
+    {"field": "tytul", "pattern": "^(?:tytu[łl]\\s*przelewu|tytu[łl]em|tytu[łl]|opis)$"},
+    {"field": "numer_transakcji", "pattern": "^(?:nr\\s*ref\\.?|identyfikator\\s*operacji|numer\\s*referencyjny|numer\\s*transakcji|numer\\s*operacji)(?:\\s+\\w+){0,2}$"}
   ],
-  "transfer_stop": "^(?:zrealizowano|status|opłata/prowizja|prowizja|waluta|tryb|kanał|typ operacji|data wygenerowania|z poważaniem)$"
+  "transfer_stop": "^(?:zrealizowano|status|op[łl]ata/prowizja|prowizja|waluta|tryb|kana[łl]|typ\\s*operacji|data\\s*wygenerowania|z\\s*powa[żz]aniem)$"
 }

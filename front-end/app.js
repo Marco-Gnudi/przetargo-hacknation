@@ -499,7 +499,10 @@ function renderSummaryDoc(item) {
   const name = document.createElement("span");
   name.textContent = `${item.filename} — ${typeLabel(item.document_type)}`;
   const status = document.createElement("span");
-  title.append(name, status);
+  title.append(name);
+  const badge = ocrBadge(item);
+  if (badge) title.append(badge);
+  title.append(status);
   block.append(title);
 
   if (item.status !== "ok") {
@@ -534,6 +537,14 @@ function typeLabel(documentType) {
   return t("types")[documentType] || t("types").unknown;
 }
 
+function ocrBadge(item) {
+  if (!item || item.text_source !== "ocr") return null;
+  const badge = document.createElement("span");
+  badge.className = "ocr-badge";
+  badge.textContent = "OCR";
+  return badge;
+}
+
 function renderResult(item) {
   const article = document.createElement("details");
   article.className = "result";
@@ -541,6 +552,8 @@ function renderResult(item) {
   const heading = document.createElement("summary");
   const sizeLabel = Number.isFinite(item.size) ? ` · ${formatSize(item.size)}` : "";
   heading.textContent = `${item.filename}${sizeLabel} — ${typeLabel(item.document_type)}`;
+  const badge = ocrBadge(item);
+  if (badge) heading.append(badge);
   if (item.status === "unrecognized" || item.status === "error") heading.append(uncertainMark());
   article.append(heading);
 

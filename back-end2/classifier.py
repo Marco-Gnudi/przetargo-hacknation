@@ -5,8 +5,16 @@ import re
 from pdf_reader import PdfDocument
 
 
+_FOLD = str.maketrans("ąćęłńóśźż", "acelnoszz")
+
+
+def _fold(text):
+    """Drop Polish diacritics so an OCR label still matches the rule keyword."""
+    return text.lower().translate(_FOLD)
+
+
 def classify(document: PdfDocument, rules: dict):
-    text = document.text.lower()
+    text = _fold(document.text)
     scores = {}
     for name, spec in rules["classes"].items():
         if not _structure(name, text):
@@ -14,8 +22,8 @@ def classify(document: PdfDocument, rules: dict):
             continue
         score = rules["classification"]["minimum_score"]
         for keyword, weight in spec["keywords"]:
-            score += text.count(keyword.lower()) * weight
-        if _heading(document.text, spec["heading"]):
+            score += text.count(_fold(keyword)) * weight
+        if _heading(text, _fold(spec["heading"])):
             score += 8
         scores[name] = score
     settings = rules["classification"]
@@ -39,6 +47,7 @@ def classify(document: PdfDocument, rules: dict):
 
 
 def _structure(name, text):
+    text = _fold(text)
     if name == "przelew":
         phrases = (
             "polecenie przelewu",
@@ -47,18 +56,24 @@ def _structure(name, text):
             "potwierdzenie wykonania przelewu",
             "potwierdzenie operacji bankowej",
             "potwierdzenie transakcji",
-            "dowód wykonania przelewu",
+            "dowod wykonania przelewu",
             "kwota przelewu",
             "rachunek nadawcy",
+            "z rachunku",
+            "przelew krajowy",
+            "przelew elixir",
+            "przelew z rachunku",
+            "rachunek zleceniodawcy",
+            "elixir",
         )
-        has_phrase = any(phrase in text for phrase in phrases)
+        has_phrase = any(_fold(phrase) in text for phrase in phrases)
         has_account = re.search(r"(?:\d[\s-]*){26}", text) is not None
         return has_phrase and has_account
     if name == "odwolanie":
-        return _heading(text, "odwołanie", exact=True) and "odwołując" in text and "zamawiając" in text
+        return _heading(text, "odwolanie", exact=True) and "odwolujac" in text and "zamawiajac" in text
     if name == "pelnomocnictwo":
-        return "pełnomocnictw" in text and (
-            "udzielam" in text or "mocodawc" in text or "upoważniam" in text or "ustanawiam" in text
+        return "pelnomocnictw" in text and (
+            "udzielam" in text or "mocodawc" in text or "upowazniam" in text or "ustanawiam" in text
         )
     return False
 

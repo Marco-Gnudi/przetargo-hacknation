@@ -155,8 +155,17 @@ async def _process_upload(upload: UploadFile, mode: str = "regular"):
         with os.fdopen(handle, "wb") as stored:
             stored.write(data)
         if mode == "bielik_only":
+            from pdf_reader import read_pdf
+
+            document = read_pdf(path)
             payload, document_type, sources, raw = extract_bielik_only(Path(path))
-            diagnostic = {"document_type": document_type, "warnings": [], "file": filename}
+            diagnostic = {
+                "document_type": document_type,
+                "warnings": [],
+                "file": filename,
+                "text_source": document.text_source,
+                "ocr_seconds": document.ocr_seconds,
+            }
             item = _envelope(filename, payload, diagnostic, None)
             item["sources"] = sources
             item["raw"] = raw
@@ -219,6 +228,8 @@ def _envelope(filename, payload, diagnostic, error, status=None):
         "result": payload if isinstance(payload, dict) else {},
         "warnings": list(diagnostic["warnings"]) if diagnostic else [],
         "error": error,
+        "text_source": diagnostic.get("text_source") if diagnostic else None,
+        "ocr_seconds": diagnostic.get("ocr_seconds") if diagnostic else None,
     }
 
 

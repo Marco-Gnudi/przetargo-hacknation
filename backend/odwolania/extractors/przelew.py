@@ -46,16 +46,16 @@ _AMOUNT = re.compile(
 _ACCOUNT = re.compile(r"(?i)(?<!\d)(?:PL)?(?:[\s-]*\d){26}(?!\d)")
 _TXN = re.compile(r"\b[A-Z]{3}\d{10,16}\b")
 _TITLE = re.compile(
-    r"(?is)(?:tytu[łl]em|tytu[łl]\s+przelewu|tytu[łl]|opis)\s*[:.]?\s*(.+?)"
+    r"(?is)(?:tytu[łl]em|tytu[łl]\s*przelewu|tytu[łl]|opis)\s*[:.]?\s*(.+?)"
     r"(?=\n\s*(?:numer\b|nr\s+ref|identyfikator\s+operacji|status\b|kana[łl]\b|"
     r"typ\s+operacji|op[łl]ata\b|tryb\b|waluta\b|zrealizowano|data\s+\w+|kwota\b|"
     r"warto[śs][ćc]\b|godz\b)|$)"
 )
 _Z_LABEL = re.compile(
-    r"(?i)rachunek\s+(?:obci[aą]żany|zleceniodawcy|nadawcy|p[łl]atnika)|z\s+rachunku"
+    r"(?i)rachunek\s*(?:obci[aą][żz]any|zleceniodawcy|nadawcy|p[łl]atnika)|z\s*rachunku"
 )
 _NA_LABEL = re.compile(
-    r"(?i)rachunek\s+(?:odbiorcy|beneficjenta|uznawany|adresata)|na\s+rachunek"
+    r"(?i)rachunek\s*(?:odbiorcy|beneficjenta|uznawany|adresata)|na\s*rachunek"
 )
 
 

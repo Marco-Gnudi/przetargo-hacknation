@@ -8,6 +8,20 @@ from dataclasses import dataclass
 from odwolania.config import load_settings
 
 _FLAGS = re.IGNORECASE | re.MULTILINE
+_FOLD = str.maketrans("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", "acelnoszzACELNOSZZ")
+
+
+def _fold(text: str) -> str:
+    return text.translate(_FOLD)
+
+
+def _matches(pattern: str, text: str) -> bool:
+    if re.search(pattern, text, _FLAGS):
+        return True
+    folded = _fold(pattern)
+    if folded == pattern:
+        return False
+    return re.search(folded, _fold(text), _FLAGS) is not None
 
 
 @dataclass(frozen=True)
@@ -49,7 +63,7 @@ def classify_text(text: str) -> Classification:
     for doc in settings.document_types:
         score = 0.0
         for keyword in doc.keywords:
-            if re.search(keyword.pattern, text, _FLAGS):
+            if _matches(keyword.pattern, text):
                 score += keyword.weight
         scores[doc.id] = score
 

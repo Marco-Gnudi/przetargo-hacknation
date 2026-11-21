@@ -2,6 +2,7 @@
 
 import re
 
+from checksums import repair_nrb
 from normalizers import account_number, amount, parse_date, transaction_id, compact
 
 
@@ -31,7 +32,7 @@ def extract_przelew(document, rules):
             "z_rachunku": account_number(values.get("z_rachunku")),
         }
     }
-    return _fill_gaps(document.text, payload)
+    return _fill_gaps(document, payload)
 
 
 def _lines(text):
@@ -50,13 +51,30 @@ def _lines(text):
     return rows
 
 
-def _fill_gaps(text, payload):
+def _fill_gaps(document, payload):
+    text = document.text
+    ocr = getattr(document, "text_source", "text") == "ocr"
     transfer = payload["przelew_bankowy"]
     accounts = []
     for match in re.finditer(r"(?:PL[\s-]*)?((?:\d[\s-]*){26})", text, re.IGNORECASE):
         number = re.sub(r"\D", "", match.group(1))
         if len(number) == 26 and number not in accounts:
             accounts.append(number)
+    checked = []
+    for number in accounts:
+        repaired = repair_nrb(number)
+        if repaired and repaired not in checked:
+            checked.append(repaired)
+    if not checked and ocr:
+        for match in re.finditer(r"(?i)(?:PL[\s-]*)?[0-9OIlSBZG][0-9OIlSBZG\s-]{18,40}", text):
+            repaired = repair_nrb(match.group(0))
+            if repaired and repaired not in checked:
+                checked.append(repaired)
+    accounts = checked or accounts
+    if transfer["z_rachunku"]:
+        transfer["z_rachunku"] = repair_nrb(transfer["z_rachunku"]) or (None if ocr else transfer["z_rachunku"])
+    if transfer["na_rachunek"]:
+        transfer["na_rachunek"] = repair_nrb(transfer["na_rachunek"]) or (None if ocr else transfer["na_rachunek"])
     if transfer["z_rachunku"] is None and accounts:
         transfer["z_rachunku"] = accounts[0]
     if transfer["na_rachunek"] is None and len(accounts) > 1:
@@ -64,13 +82,13 @@ def _fill_gaps(text, payload):
     if transfer["numer_transakcji"] is None:
         transfer["numer_transakcji"] = transaction_id(text)
     if transfer["tytul"] is None:
-        title = re.search(r"((?:opłata skarbowa|tytuł).{10,240})", compact(text), re.IGNORECASE)
+        title = re.search(r"((?:op[łl]ata\s*skarbowa|tytu[łl]).{10,240})", compact(text), re.IGNORECASE)
         if title:
             transfer["tytul"] = _trim_title(compact(title.group(1)))
     if transfer["kwota"] is None:
         match = re.search(
-            r"(?:kwocie|kwotę|kwoty|kwota)\s+(\d[\d\s]*[.,]\d{2})",
-            text,
+            r"(?:kwocie|kwot[eę]|kwoty|kwota).{0,160}?(-?\d[\d\s]*[.,]\d{2})",
+            compact(text),
             re.IGNORECASE,
         )
         if match:
@@ -100,9 +118,10 @@ def _first_date(text):
 def _trim_title(value):
     if not value:
         return None
+    trimmed = re.sub(r"^(?:tytu[łl]\s*[:łl]?\s*)+", "", value, flags=re.IGNORECASE)
     trimmed = re.split(
-        r"\b(?:typ operacji|kanał|potwierdzenie ma charakter|bank nie ponosi|status|numer referencyjny|numer transakcji|nr ref\.?|waluta|tryb|data wygenerowania|z poważaniem)\b",
-        value,
+        r"\b(?:typ\s*operacji|kana[łl]|potwierdzenie ma charakter|bank nie ponosi|status|numer\s*referencyjny|numer\s*transakcji|nr\s*ref\.?|waluta|tryb|data\s*(?:wygenerowania|transakcji|operacji)|kwota|z\s*powa[żz]aniem)\b",
+        trimmed,
         maxsplit=1,
         flags=re.IGNORECASE,
     )[0]
