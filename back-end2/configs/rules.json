@@ -1,0 +1,64 @@
+{
+  "classes": {
+    "odwolanie": {
+      "heading": "odwołanie",
+      "keywords": [
+        ["odwołujący", 4],
+        ["odwołanie", 2],
+        ["krajowej izby odwoławczej", 3],
+        ["zarzut nr", 2],
+        ["zamawiający", 1]
+      ]
+    },
+    "pelnomocnictwo": {
+      "heading": "pełnomocnictwo",
+      "keywords": [
+        ["pełnomocnictwo", 2],
+        ["mocodawca", 4],
+        ["mocodawcą", 4],
+        ["umocowan", 3],
+        ["pełnomocnik", 2]
+      ]
+    },
+    "przelew": {
+      "heading": "polecenie przelewu",
+      "keywords": [
+        ["polecenie przelewu", 5],
+        ["potwierdzenie wykonania przelewu", 5],
+        ["potwierdzenie przelewu", 4],
+        ["dowód wykonania przelewu", 5],
+        ["rachunek odbiorcy", 3],
+        ["rachunek obciążany", 3],
+        ["z rachunku", 2],
+        ["kwota", 1]
+      ]
+    }
+  },
+  "classification": {
+    "minimum_score": 6,
+    "minimum_margin": 2
+  },
+  "powod": [
+    {"id": 10, "opis": "Zaniechanie unieważnienia postępowania", "pattern": "zaniecha\\w*\\s+unieważnienia"},
+    {"id": 9, "opis": "Decyzja o unieważnieniu postępowania", "pattern": "unieważn"},
+    {"id": 7, "opis": "Zaniechanie odrzucenia oferty", "pattern": "nie\\s+odrzu"},
+    {"id": 1, "opis": "Decyzja o odrzuceniu oferty", "pattern": "odrzu"},
+    {"id": 8, "opis": "Zaniechanie wykluczenia wykonawcy", "pattern": "nie\\s+wyklucz"},
+    {"id": 3, "opis": "Decyzja o wykluczeniu wykonawcy", "pattern": "wyklucz"},
+    {"id": 2, "opis": "Ogłoszenie wyboru oferty", "pattern": "wybór oferty|wyboru oferty|ogłosił wybór"},
+    {"id": 5, "opis": "Modyfikacja treści SWZ", "pattern": "zmodyfikowa\\w+\\s+treść|modyfikacj\\w+\\s+(?:treści\\s+)?specyfikacji"},
+    {"id": 6, "opis": "Odpowiedzi i wyjaśnienia do SWZ", "pattern": "odpowiedzi i wyjaśnienia"},
+    {"id": 12, "opis": "Projektowane postanowienia umowy", "pattern": "projektowan\\w+\\s+postanowien"},
+    {"id": 11, "opis": "Opis przedmiotu zamówienia (OPZ)", "pattern": "opis(?:u|em)? przedmiotu zamówienia"},
+    {"id": 4, "opis": "Publikacja specyfikacji warunków zamówienia (SWZ)", "pattern": "opublikowa\\w+|specyfikacj\\w+ warunków zamówienia"}
+  ],
+  "transfer_labels": [
+    {"field": "z_rachunku", "pattern": "^(?:z rachunku|rachunek obciążany|rachunek zleceniodawcy|rachunek nadawcy)$"},
+    {"field": "na_rachunek", "pattern": "^(?:rachunek odbiorcy|rachunek uznawany|rachunek beneficjenta|na rachunek)$"},
+    {"field": "kwota", "pattern": "^(?:kwota operacji|kwota przelewu|kwota|wartość)$"},
+    {"field": "data_operacji", "pattern": "^(?:data transakcji|data realizacji|data wykonania|data operacji|data przelewu)$"},
+    {"field": "tytul", "pattern": "^(?:tytuł przelewu|tytuł|tytułem|opis)$"},
+    {"field": "numer_transakcji", "pattern": "^(?:nr ref\\.?|identyfikator operacji|numer referencyjny|numer transakcji|numer operacji)$"}
+  ],
+  "transfer_stop": "^(?:zrealizowano|status|opłata/prowizja|prowizja)$"
+}
