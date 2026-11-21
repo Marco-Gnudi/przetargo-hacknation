@@ -4,6 +4,7 @@ The CLI in main.py stays the evaluation entry point. This module only
 receives uploads, calls process_pdf, and deletes the temporary file.
 """
 
+import json
 import logging
 import os
 import re
@@ -23,9 +24,13 @@ from llm_fill import extract_bielik_only, fill_with_bielik, review_marks, tag_ru
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_FILES = 30
-FRONTEND = Path(__file__).resolve().parents[1] / "front-end"
-DATASET = Path(__file__).resolve().parents[1] / "UZP-hacknation-task" / "dane"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+FRONTEND = REPO_ROOT / "front-end"
+DATASET = REPO_ROOT / "UZP-hacknation-task" / "dane"
+INPUT_ROOT = REPO_ROOT / "input"
+OUTPUT_ROOT = REPO_ROOT / "output"
 CASE_NAME = re.compile(r"^przyklad_\d{2}$")
+CASE_DIR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 RULES = load_rules()
 
 def _show_llm_calls() -> None:
@@ -108,15 +113,73 @@ async def extract_batch(
     set_skip_cache(_enabled(nocache) or _enabled(nocache_query))
     started = time.perf_counter()
     selected = files[:MAX_FILES]
+    case = _next_case_name()
+    case_dir = INPUT_ROOT / case
     results = []
     for upload in selected:
-        results.append(await _process_upload(upload, mode))
+        results.append(await _save_and_process(upload, mode, case_dir, case))
     elapsed = time.perf_counter() - started
     count = len(results)
     return {
         "results": results,
         "truncated": len(files) > MAX_FILES,
         "mode": mode,
+        "usage": current_usage(),
+        "elapsed_seconds": round(elapsed, 3),
+        "seconds_per_file": round(elapsed / count, 3) if count else 0.0,
+        "case": case,
+    }
+
+
+class InputRequest(BaseModel):
+    cases: list[str] = []
+    mode: str = "regular"
+
+
+@app.get("/api/input")
+def list_input():
+    INPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    cases = []
+    for folder in sorted(path for path in INPUT_ROOT.iterdir() if path.is_dir() and CASE_DIR.fullmatch(path.name)):
+        files = []
+        for pdf in sorted(folder.glob("*.pdf")):
+            files.append({"name": pdf.name, "size": pdf.stat().st_size})
+        cases.append({"name": folder.name, "files": files})
+    return {"cases": cases}
+
+
+@app.post("/api/extract/input")
+def extract_input(body: InputRequest):
+    if body.mode not in ("regular", "bielik", "bielik_only"):
+        raise HTTPException(status_code=400, detail="mode must be regular, bielik, or bielik_only")
+    from odwolania.llm import current_usage, set_skip_cache, start_usage
+
+    start_usage()
+    set_skip_cache(False)
+    started = time.perf_counter()
+    results = []
+    seen = 0
+    for name in body.cases:
+        folder = _case_dir(name)
+        if folder is None:
+            continue
+        for pdf in sorted(folder.glob("*.pdf")):
+            if seen >= MAX_FILES:
+                break
+            seen += 1
+            item = _extract_path(pdf, pdf.name, body.mode)
+            item["size"] = pdf.stat().st_size
+            item["output"] = _write_output(folder.name, pdf.name, item["result"])
+            results.append(item)
+        if seen >= MAX_FILES:
+            break
+    elapsed = time.perf_counter() - started
+    count = len(results)
+    return {
+        "results": results,
+        "truncated": seen >= MAX_FILES,
+        "mode": body.mode,
         "usage": current_usage(),
         "elapsed_seconds": round(elapsed, 3),
         "seconds_per_file": round(elapsed / count, 3) if count else 0.0,
@@ -138,10 +201,29 @@ def _enabled(value: str) -> bool:
 
 async def _process_upload(upload: UploadFile, mode: str = "regular"):
     filename = Path(upload.filename or "document.pdf").name
+    data = await upload.read()
+    return _process_bytes(filename, data, mode)
+
+
+async def _save_and_process(upload: UploadFile, mode: str, case_dir: Path, case: str):
+    filename = Path(upload.filename or "document.pdf").name
+    data = await upload.read()
+    rejected = pdf_rejection(filename, data)
+    if rejected or not data or len(data) > MAX_BYTES:
+        return _process_bytes(filename, data, mode)
+    case_dir.mkdir(parents=True, exist_ok=True)
+    destination = case_dir / filename
+    destination.write_bytes(data)
+    item = _extract_path(destination, filename, mode)
+    item["size"] = len(data)
+    item["output"] = _write_output(case, filename, item["result"])
+    return item
+
+
+def _process_bytes(filename: str, data: bytes, mode: str):
     from odwolania.llm import set_llm_document
 
     set_llm_document(filename)
-    data = await upload.read()
     rejected = pdf_rejection(filename, data)
     if rejected:
         return _envelope(filename, {}, None, rejected, status="rejected")
@@ -149,13 +231,25 @@ async def _process_upload(upload: UploadFile, mode: str = "regular"):
         return _envelope(filename, {}, None, "The file is empty.")
     if len(data) > MAX_BYTES:
         return _envelope(filename, {}, None, "The file is larger than 20 MB.")
-
     handle, path = tempfile.mkstemp(suffix=".pdf")
     try:
         with os.fdopen(handle, "wb") as stored:
             stored.write(data)
+        return _extract_path(Path(path), filename, mode)
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def _extract_path(path: Path, filename: str, mode: str):
+    from odwolania.llm import set_llm_document
+
+    set_llm_document(filename)
+    try:
         if mode == "bielik_only":
-            payload, document_type, sources, raw = extract_bielik_only(Path(path))
+            payload, document_type, sources, raw = extract_bielik_only(path)
             diagnostic = {"document_type": document_type, "warnings": [], "file": filename}
             item = _envelope(filename, payload, diagnostic, None)
             item["sources"] = sources
@@ -188,11 +282,32 @@ async def _process_upload(upload: UploadFile, mode: str = "regular"):
         return item
     except Exception:
         return _envelope(filename, {}, None, "The PDF could not be read.")
-    finally:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
+
+
+def _case_dir(name: str) -> Path | None:
+    if not CASE_DIR.fullmatch(name or ""):
+        return None
+    folder = (INPUT_ROOT / name).resolve()
+    if not folder.is_relative_to(INPUT_ROOT.resolve()) or not folder.is_dir():
+        return None
+    return folder
+
+
+def _next_case_name() -> str:
+    INPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    numbers = []
+    for path in INPUT_ROOT.iterdir():
+        match = re.fullmatch(r"case(\d+)", path.name)
+        if match and path.is_dir():
+            numbers.append(int(match.group(1)))
+    return f"case{max(numbers, default=0) + 1}"
+
+
+def _write_output(case: str, filename: str, payload: dict) -> str:
+    destination = OUTPUT_ROOT / case / f"{Path(filename).stem}.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return destination.relative_to(REPO_ROOT).as_posix()
 
 
 def pdf_rejection(filename: str, data: bytes) -> str | None:
