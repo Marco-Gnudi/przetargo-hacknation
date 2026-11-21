@@ -1,0 +1,26 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+# Secrets
+.env
+.env.*
+!.env.example
+# Node
+node_modules/
+dist/
+build/
+.next/
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+# Android / Gradle
+.gradle/
+local.properties
+/captures
+*.apk
+*.aab
