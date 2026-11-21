@@ -1,0 +1,15 @@
+.git
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+backend/.cache
+backend/output
+back-end2/output
+back-end2/input
+input
+output
+UZP-hacknation-task/szablon-aplikacja
+docs

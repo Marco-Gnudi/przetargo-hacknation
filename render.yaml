@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: przetargo
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Free instances sleep after 15 idle minutes and take about a minute to wake.
+    plan: starter
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Leave empty so every visitor brings their own key. A value here becomes a shared demo key.
+      - key: LLM_API_KEY
+        sync: false
