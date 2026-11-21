@@ -11,12 +11,15 @@ document_types:
   - id: odwolanie
     output_filename: odwolanie.json
     keywords:
-      # Whole line, including "O D W O Ł A N I E". Not enough on its own:
-      # the KPA textbook uses that heading and must stay below threshold.
-      - pattern: '^\s*o\s*d\s*w\s*o\s*[łl]\s*a\s*n\s*i\s*e\s*[:.]?\s*$'
+      # One physical line only. \s would cross newlines and assemble the
+      # heading out of letters on successive lines. Not enough on its own:
+      # the KPA textbook uses this heading and must stay below threshold.
+      - pattern: '^[ \t]*o[ \t]*d[ \t]*w[ \t]*o[ \t]*[łl][ \t]*a[ \t]*n[ \t]*i[ \t]*e[ \t]*[:.]?[ \t]*$'
         weight: 4
-      # Line label "Odwołujący:", not "odwołującej się" from the KPA textbook.
-      - pattern: '^\s*odwo[łl]uj[aą]cy\b'
+      # Line starts with the label and a colon ("Odwołujący:" or
+      # "Odwołujący: Konsorcjum..."). A wrapped word with no colon
+      # ("...\nOdwołujący dochował") does not count.
+      - pattern: '^[ \t]*odwo[łl]uj[aą]cy[ \t]*:'
         weight: 3
       - pattern: 'prezes\w*\s+krajowej\s+izby\s+odwo[łl]awczej'
         weight: 3
@@ -47,7 +50,7 @@ document_types:
   - id: pelnomocnictwo
     output_filename: pelnomocnictwo.json
     keywords:
-      - pattern: '^\s*p\s*e\s*[łl]\s*n\s*o\s*m\s*o\s*c\s*n\s*i\s*c\s*t\s*w\s*o(?:\s+procesowe)?\s*[:.]?\s*$'
+      - pattern: '^[ \t]*p[ \t]*e[ \t]*[łl][ \t]*n[ \t]*o[ \t]*m[ \t]*o[ \t]*c[ \t]*n[ \t]*i[ \t]*c[ \t]*t[ \t]*w[ \t]*o(?:[ \t]+procesowe)?[ \t]*[:.]?[ \t]*$'
         weight: 7
     fields:
       - mocodawca[].data.imie_nazwisko

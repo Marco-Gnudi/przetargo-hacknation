@@ -1,4 +1,4 @@
-from odwolania.classifier import classify
+from odwolania.classifier import classify, classify_text
 
 
 def test_empty_text_is_unclassified():
@@ -24,6 +24,22 @@ def test_spaced_power_of_attorney_heading():
 def test_transfer_confirmation_phrase():
     text = "POLECENIE PRZELEWU\nPotwierdzenie realizacji polecenia przelewu\nKwota 10,00 PLN\n"
     assert classify(text) == "przelew"
+
+
+def test_line_wrap_does_not_create_an_appeal_label():
+    text = (
+        "uznać należy, że\n"
+        "Odwołujący dochował regulacji art. 515.\n"
+        "odwołania wniesionego do Prezesa Krajowej Izby Odwoławczej w dniu 3\n"
+    )
+    result = classify_text(text)
+    assert result.label is None
+    assert result.scores["odwolanie"] == 3
+
+
+def test_heading_is_not_assembled_across_lines():
+    text = "o\nd\nw\no\nł\na\nn\ni\ne\n"
+    assert classify_text(text).scores["odwolanie"] == 0
 
 
 def test_notice_mentioning_appeal_is_unclassified():
