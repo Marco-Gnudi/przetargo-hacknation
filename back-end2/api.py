@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -57,7 +58,7 @@ class PrivateNetworkMiddleware(BaseHTTPMiddleware):
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https?://(127\.0\.0\.1|localhost)(:\d+)?",
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
 )
 app.add_middleware(PrivateNetworkMiddleware)
@@ -147,6 +148,26 @@ def list_input():
             files.append({"name": pdf.name, "size": pdf.stat().st_size})
         cases.append({"name": folder.name, "files": files})
     return {"cases": cases}
+
+
+@app.delete("/api/input")
+def delete_input():
+    """Remove case files from input/. The output folder is not touched."""
+    removed = []
+    if INPUT_ROOT.is_dir():
+        root = INPUT_ROOT.resolve()
+        for path in list(INPUT_ROOT.iterdir()):
+            if path.name == ".gitkeep":
+                continue
+            target = path.resolve()
+            if not target.is_relative_to(root):
+                continue
+            if path.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+            removed.append(path.name)
+    return {"removed": removed}
 
 
 @app.post("/api/extract/input")

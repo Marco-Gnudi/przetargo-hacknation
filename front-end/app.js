@@ -27,6 +27,9 @@ const copy = {
     modeBielikOnlyHint: "Bez reguł, same wywołania modelu",
     documents: "Dokumenty",
     inputFolder: "Folder input",
+    selectAll: "Zaznacz wszystkie",
+    deleteInput: "Usuń input",
+    deleteInputConfirm: "Usunąć pliki z folderu input? Folder output zostanie.",
     inputEmpty: "Folder input jest pusty. Dodaj katalog sprawy z plikami PDF.",
     inputHint: "Zaznacz sprawy z folderu input. Wynik trafi do folderu output.",
     dropAria: "Dodaj do 30 plików PDF. Upuść je tutaj albo naciśnij Enter, aby wybrać je z urządzenia.",
@@ -98,6 +101,9 @@ const copy = {
     modeBielikOnlyHint: "No rules, model calls only",
     documents: "Documents",
     inputFolder: "Input folder",
+    selectAll: "Select all",
+    deleteInput: "Delete input",
+    deleteInputConfirm: "Delete the files in the input folder? The output folder will stay.",
     inputEmpty: "The input folder is empty. Add a case folder of PDFs.",
     inputHint: "Select cases from the input folder. Results are written to the output folder.",
     dropAria: "Add up to 30 PDF files. Drop them here or press Enter to choose them from your device.",
@@ -175,6 +181,26 @@ langButtons.forEach((button) => {
 
 modeButtons.forEach((button) => {
   button.addEventListener("click", () => selectMode(button.dataset.mode));
+});
+
+document.querySelector("#select-all").addEventListener("click", () => {
+  inputCatalog.forEach((item) => state.selectedCases.add(item.name));
+  renderInputCases();
+  renderFiles();
+});
+
+document.querySelector("#delete-input").addEventListener("click", async () => {
+  if (state.busy) return;
+  if (!window.confirm(t("deleteInputConfirm"))) return;
+  try {
+    const response = await fetch(`${apiBase()}/api/input`, { method: "DELETE" });
+    if (!response.ok) throw new Error(String(response.status));
+    state.selectedCases.clear();
+    await loadInputCases();
+  } catch {
+    state.notice = { key: "apiError" };
+    renderNotice();
+  }
 });
 
 dropzone.addEventListener("click", (event) => {

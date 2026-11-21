@@ -245,9 +245,27 @@ a {
   background: #f8fafc;
 }
 
+.input-folder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .input-folder h3 {
   margin: 0;
   font-size: 14px;
+}
+
+.input-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.input-actions .btn {
+  padding: 6px 10px;
+  font-size: 13px;
 }
 
 .input-hint,
