@@ -34,6 +34,8 @@ _VISION_SLOTS = threading.Semaphore(4)
 _VISION_TIMEOUT = 30.0
 
 _RUN_USAGE: ContextVar[dict[str, int] | None] = ContextVar("llm_run_usage", default=None)
+_TOTAL_LOCK = threading.Lock()
+_TOTAL_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
 _SKIP_CACHE: ContextVar[bool] = ContextVar("llm_skip_cache", default=False)
 _DOCUMENT: ContextVar[str] = ContextVar("llm_document", default="")
 
@@ -41,6 +43,17 @@ _DOCUMENT: ContextVar[str] = ContextVar("llm_document", default="")
 def start_usage() -> None:
     """Begin a fresh token total for this request."""
     _RUN_USAGE.set({"prompt_tokens": 0, "completion_tokens": 0, "calls": 0})
+
+
+def reset_total_usage() -> None:
+    """Zero the process-wide total. Worker threads all add into this one."""
+    with _TOTAL_LOCK:
+        _TOTAL_USAGE.update(prompt_tokens=0, completion_tokens=0, calls=0)
+
+
+def total_usage() -> dict[str, int]:
+    with _TOTAL_LOCK:
+        return dict(_TOTAL_USAGE)
 
 
 def current_usage() -> dict[str, int]:
@@ -226,6 +239,10 @@ def _record_usage(response: object) -> tuple[int, int]:
     bucket["prompt_tokens"] += prompt
     bucket["completion_tokens"] += completion
     bucket["calls"] = int(bucket.get("calls", 0)) + 1
+    with _TOTAL_LOCK:
+        _TOTAL_USAGE["prompt_tokens"] += prompt
+        _TOTAL_USAGE["completion_tokens"] += completion
+        _TOTAL_USAGE["calls"] += 1
     return prompt, completion
 
 

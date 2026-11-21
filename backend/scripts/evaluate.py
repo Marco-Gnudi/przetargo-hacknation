@@ -30,7 +30,7 @@ from llm_fill import extract_bielik_only, fill_with_bielik  # noqa: E402
 from normalizers import account_number, amount, compact  # noqa: E402
 from pipeline import load_rules, process_pdf  # noqa: E402
 from odwolania.config import task_data_dir  # noqa: E402
-from odwolania.llm import current_usage, load_env, set_skip_cache, start_usage  # noqa: E402
+from odwolania.llm import current_usage, load_env, reset_total_usage, set_skip_cache, start_usage, total_usage  # noqa: E402
 
 _JSON_BY_PDF = {"potwierdzenie_przelewu.pdf": "przelew.json"}
 _TYPE_BY_NAME = {
@@ -60,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
 
     load_env()
     start_usage()
+    reset_total_usage()
     set_skip_cache(args.cache == "off")
     from vision_fill import reset_vision_stats, vision_stats
 
@@ -77,7 +78,9 @@ def main(argv: list[str] | None = None) -> int:
         rows = _score_parallel(pdfs, args.mode, rules)
     elapsed = time.perf_counter() - started
     summary = _summarise(rows)
-    usage = current_usage()
+    usage = total_usage()
+    if usage["calls"] == 0:
+        usage = current_usage()
     summary["mode"] = args.mode
     summary["cache"] = args.cache
     summary["data"] = str(data)
