@@ -535,9 +535,10 @@ function typeLabel(documentType) {
 }
 
 function renderResult(item) {
-  const article = document.createElement("article");
+  const article = document.createElement("details");
   article.className = "result";
-  const heading = document.createElement("h3");
+  article.open = true;
+  const heading = document.createElement("summary");
   const sizeLabel = Number.isFinite(item.size) ? ` · ${formatSize(item.size)}` : "";
   heading.textContent = `${item.filename}${sizeLabel} — ${typeLabel(item.document_type)}`;
   if (item.status === "unrecognized" || item.status === "error") heading.append(uncertainMark());
