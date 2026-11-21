@@ -212,7 +212,22 @@ def normalise_vision(doc_type: str, raw: dict) -> dict:
         payload = _lift_attorneys(payload)
     shaped = _apply(_SCHEMAS[doc_type], payload, normalise=True)
     _reject_bad_ids(shaped)
+    if doc_type == "przelew":
+        body = shaped.get("przelew_bankowy") or {}
+        body["numer_transakcji"] = _vision_transaction_id(body.get("numer_transakcji"))
     return shaped
+
+
+def _vision_transaction_id(value: object):
+    """A vision reply may paste the title or the account into the transaction id."""
+    import sys
+
+    root = Path(__file__).resolve().parents[2] / "back-end2"
+    if str(root) not in sys.path:
+        sys.path.append(str(root))
+    from normalizers import transaction_id
+
+    return transaction_id(None if value is None else str(value))
 
 
 def _from_ocr() -> bool:

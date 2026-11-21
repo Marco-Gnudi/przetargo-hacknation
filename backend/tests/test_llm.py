@@ -147,3 +147,20 @@ def test_extract_json_truncates_text_and_uses_temperature_zero():
     user_message = call["messages"][1]["content"]
     assert "ą" * MAX_TEXT_CHARS in user_message
     assert "ą" * (MAX_TEXT_CHARS + 1) not in user_message
+
+
+def test_vision_transaction_id_drops_a_title_and_keeps_a_reference():
+    from odwolania.llm_extractor import normalise_vision
+
+    prose = normalise_vision("przelew", {"przelew_bankowy": {
+        "numer_transakcji": "PRZELEW ELIXIR - ONLINE",
+    }})
+    account = normalise_vision("przelew", {"przelew_bankowy": {
+        "numer_transakcji": "49 1020 5460 0592 9792 1415 5903",
+    }})
+    kept = normalise_vision("przelew", {"przelew_bankowy": {
+        "numer_transakcji": "CEN9057564440515",
+    }})
+    assert prose["przelew_bankowy"]["numer_transakcji"] is None
+    assert account["przelew_bankowy"]["numer_transakcji"] is None
+    assert kept["przelew_bankowy"]["numer_transakcji"] == "CEN9057564440515"
