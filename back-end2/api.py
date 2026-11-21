@@ -5,10 +5,12 @@ receives uploads, calls process_pdf, and deletes the temporary file.
 """
 
 import os
+import re
 import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -18,6 +20,8 @@ from pipeline import load_rules, process_pdf
 MAX_BYTES = 20 * 1024 * 1024
 MAX_FILES = 30
 FRONTEND = Path(__file__).resolve().parents[1] / "front-end"
+DATASET = Path(__file__).resolve().parents[1] / "UZP-hacknation-task" / "dane"
+CASE_NAME = re.compile(r"^przyklad_\d{2}$")
 RULES = load_rules()
 
 app = FastAPI(title="PrzetarGO")
@@ -45,6 +49,30 @@ def health():
 @app.post("/api/extract")
 async def extract(file: UploadFile = File(...)):
     return await _process_upload(file)
+
+
+class ExampleRequest(BaseModel):
+    case: str = "przyklad_01"
+
+
+@app.post("/api/extract/example")
+def extract_example(body: ExampleRequest):
+    if not CASE_NAME.fullmatch(body.case):
+        return {"results": [], "error": "Unknown case."}
+    folder = (DATASET / body.case).resolve()
+    if not folder.is_relative_to(DATASET.resolve()) or not folder.is_dir():
+        return {"results": [], "error": "Unknown case."}
+    results = []
+    for pdf in sorted(folder.glob("*.pdf")):
+        try:
+            payload, diagnostic = process_pdf(pdf, RULES)
+            diagnostic["file"] = pdf.name
+            item = _envelope(pdf.name, payload, diagnostic, None)
+        except Exception:
+            item = _envelope(pdf.name, {}, None, "The PDF could not be read.")
+        item["size"] = pdf.stat().st_size
+        results.append(item)
+    return {"results": results, "case": body.case}
 
 
 @app.post("/api/extract/batch")

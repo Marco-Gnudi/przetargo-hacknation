@@ -3,6 +3,7 @@ const fileInput = document.querySelector("#file-input");
 const fileList = document.querySelector("#file-list");
 const inputMessage = document.querySelector("#input-message");
 const submitButton = document.querySelector("#submit");
+const loadExampleButton = document.querySelector("#load-example");
 const resetButton = document.querySelector("#reset");
 const summary = document.querySelector("#summary");
 const detail = document.querySelector("#detail");
@@ -41,7 +42,8 @@ const copy = {
     noCases: "Brak spraw.",
     processingNow: "Przetwarzanie…",
     apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom back-end2/start.sh.",
-    emptyFiles: "Przeglądarka nie przekazała zawartości: {names}. Kliknij pole i wybierz pliki PDF z dysku. Przeciąganie z edytora często daje puste pliki.",
+    emptyFiles: "Te pliki mają 0 bajtów na tym komputerze, tak jak w oknie wyboru plików. Wybierz kopie, które mają rozmiar, albo użyj „Wczytaj przykład 01”.",
+    loadExample: "Wczytaj przykład 01",
     filesTotal: "{count} plików · {size}",
     bielikNote: "Model Bielik nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
     unrecognized: "Dokument nie został rozpoznany. Ekstraktor nie przypisał go do odwołania, pełnomocnictwa ani potwierdzenia przelewu.",
@@ -95,7 +97,8 @@ const copy = {
     noCases: "No cases yet.",
     processingNow: "Processing…",
     apiError: "The extractor did not respond. Refresh this page. If it still fails, run back-end2/start.sh.",
-    emptyFiles: "The browser did not include the contents of {names}. Click the box and choose the PDFs from your disk. Dragging them from the editor often sends empty files.",
+    emptyFiles: "These files are 0 bytes on this computer, the same as the file window shows. Choose copies that have a size, or use Load example 01.",
+    loadExample: "Load example 01",
     filesTotal: "{count} files · {size}",
     bielikNote: "Bielik is not connected. This run used the deterministic extractor.",
     unrecognized: "The document was not recognized. It was not classified as an appeal, a power of attorney, or a transfer confirmation.",
@@ -181,6 +184,7 @@ fileInput.addEventListener("change", () => {
 });
 
 submitButton.addEventListener("click", submitFiles);
+loadExampleButton.addEventListener("click", loadExample);
 resetButton.addEventListener("click", resetAll);
 
 function savedLang() {
@@ -331,6 +335,31 @@ function renderFiles() {
   }
   submitButton.disabled = state.busy || state.files.length === 0;
   submitButton.textContent = state.busy ? t("processingNow") : t("process");
+  loadExampleButton.disabled = state.busy;
+}
+
+async function loadExample() {
+  if (state.busy) return;
+  state.busy = true;
+  state.notice = null;
+  renderFiles();
+  try {
+    const response = await fetch(`${apiBase()}/api/extract/example`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ case: "przyklad_01" }),
+    });
+    if (!response.ok) throw new Error(String(response.status));
+    const body = await response.json();
+    state.submissions.push({ mode: state.mode, results: body.results || [] });
+  } catch {
+    state.notice = { key: "apiError" };
+  } finally {
+    state.busy = false;
+    renderNotice();
+    renderFiles();
+    renderOutputs();
+  }
 }
 
 async function submitFiles() {
@@ -430,7 +459,8 @@ function renderResult(item) {
   const article = document.createElement("article");
   article.className = "result";
   const heading = document.createElement("h3");
-  heading.textContent = `${item.filename} — ${typeLabel(item.document_type)}`;
+  const sizeLabel = Number.isFinite(item.size) ? ` · ${formatSize(item.size)}` : "";
+  heading.textContent = `${item.filename}${sizeLabel} — ${typeLabel(item.document_type)}`;
   article.append(heading);
 
   if (item.status === "unrecognized") {

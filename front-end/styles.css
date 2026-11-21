@@ -345,6 +345,9 @@ a {
 }
 
 .card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 16px 18px 18px;
 }
 
