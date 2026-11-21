@@ -6,12 +6,13 @@ import json
 from pathlib import Path
 
 from odwolania.classifier import classify
+from odwolania.extractors.przelew import extract_przelew
 from odwolania.pdf_reader import read_pdf
 
 
 def extract(document_type: str, text: str) -> dict:
-    """Placeholder for type-specific extractors. Returns {} until they exist."""
-    del document_type, text
+    if document_type == "przelew":
+        return extract_przelew(text).data
     return {}
 
 

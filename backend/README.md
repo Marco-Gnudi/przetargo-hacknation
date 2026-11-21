@@ -33,6 +33,15 @@ Each `<input>/<case>/*.pdf` is written to `<output>/<case>/<same name>.json`.
 
 Reads `przyklad_01/potwierdzenie_przelewu.pdf`, asks for the przelew fields, and prints the model JSON next to `przyklad_01/przelew.json`.
 
+## Evaluate
+
+```bat
+.venv\Scripts\python.exe scripts\eval_classifier.py
+.venv\Scripts\python.exe scripts\eval_przelew.py
+```
+
+The classifier is scored on `dane/`, including `negatywne/` and the decoy PDFs. The przelew eval compares all 60 cases with the expected `przelew.json` and reports whether each field came from a rule or the LLM.
+
 ## Tests
 
 ```bat

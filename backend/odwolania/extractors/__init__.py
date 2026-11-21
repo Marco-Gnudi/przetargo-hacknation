@@ -1,1 +1,5 @@
-"""Type-specific extractors. Empty until classification is implemented."""
+"""Type-specific extractors."""
+
+from odwolania.extractors.przelew import extract_przelew
+
+__all__ = ["extract_przelew"]

@@ -1,17 +1,25 @@
 # Document types for Odwołania2JSON.
 # Add a type by appending one entry. Do not change Python to register it.
-# output_filename is the canonical schema name (oczekiwane-json/<output_filename>).
-# keywords are matched against document text only, never the file name.
+# Each keyword pattern is a regex (case-insensitive). A type's score is the sum
+# of weights of patterns that match at least once. The winner must reach
+# `threshold` and lead the next type by at least `margin`. Otherwise the
+# document is unclassified and the pipeline writes {}.
+threshold: 7
+margin: 1
+
 document_types:
   - id: odwolanie
     output_filename: odwolanie.json
     keywords:
-      - odwołanie
-      - odwolanie
-      - odwołujący
-      - odwolujacy
-      - Krajowa Izba Odwoławcza
-      - zarzut
+      # Whole line, including "O D W O Ł A N I E". Not enough on its own:
+      # the KPA textbook uses that heading and must stay below threshold.
+      - pattern: '^\s*o\s*d\s*w\s*o\s*[łl]\s*a\s*n\s*i\s*e\s*[:.]?\s*$'
+        weight: 4
+      # Line label "Odwołujący:", not "odwołującej się" from the KPA textbook.
+      - pattern: '^\s*odwo[łl]uj[aą]cy\b'
+        weight: 3
+      - pattern: 'prezes\w*\s+krajowej\s+izby\s+odwo[łl]awczej'
+        weight: 3
     fields:
       - OdwolanieKIO.data
       - OdwolanieKIO.czynnosc_dzien
@@ -39,12 +47,8 @@ document_types:
   - id: pelnomocnictwo
     output_filename: pelnomocnictwo.json
     keywords:
-      - pełnomocnictwo
-      - pelnomocnictwo
-      - mocodawca
-      - pełnomocnik
-      - pelnomocnik
-      - umocowuje
+      - pattern: '^\s*p\s*e\s*[łl]\s*n\s*o\s*m\s*o\s*c\s*n\s*i\s*c\s*t\s*w\s*o(?:\s+procesowe)?\s*[:.]?\s*$'
+        weight: 7
     fields:
       - mocodawca[].data.imie_nazwisko
       - mocodawca[].data.krs
@@ -58,12 +62,8 @@ document_types:
   - id: przelew
     output_filename: przelew.json
     keywords:
-      - przelew
-      - potwierdzenie operacji
-      - potwierdzenie przelewu
-      - rachunek
-      - kwota
-      - tytuł przelewu
+      - pattern: 'potwierdzenie\s+(?:realizacji\s+)?(?:polecenia\s+)?przelewu|potwierdzenie\s+przelewu(?:\s+krajowego)?|potwierdzenie\s+wykonania\s+przelewu|potwierdzenie\s+transakcji|potwierdzenie\s+operacji\s+bankowej|dow[oó]d\s+wykonania\s+przelewu|poleceni[ae]\s+przelewu'
+        weight: 7
     fields:
       - przelew_bankowy.data_operacji
       - przelew_bankowy.kwota
