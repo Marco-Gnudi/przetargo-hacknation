@@ -82,7 +82,8 @@ def _fill_gaps(document, payload):
     if transfer["numer_transakcji"] is None:
         transfer["numer_transakcji"] = transaction_id(text)
     if transfer["tytul"] is None:
-        title = re.search(r"((?:op[łl]ata\s*skarbowa|tytu[łl]).{10,240})", compact(text), re.IGNORECASE)
+        title = re.search(r"szczeg\S{1,3}y\s+p\S{1,3}atno\S{1,4}\s*:?\s*(.{10,240})", compact(text), re.IGNORECASE)
+        title = title or re.search(r"((?:op[łl]ata\s*skarbowa|tytu[łl]).{10,240})", compact(text), re.IGNORECASE)
         if title:
             transfer["tytul"] = _trim_title(compact(title.group(1)))
     if transfer["kwota"] is None:
@@ -91,6 +92,8 @@ def _fill_gaps(document, payload):
             compact(text),
             re.IGNORECASE,
         )
+        if not match and ocr:
+            match = re.search(r"(?<![\d.,])(\d[\d ]*[.,]\d{2})\s*PLN\b", text)
         if match:
             transfer["kwota"] = amount(match.group(1))
     if transfer["data_operacji"] is None:
@@ -118,9 +121,10 @@ def _first_date(text):
 def _trim_title(value):
     if not value:
         return None
-    trimmed = re.sub(r"^(?:tytu[łl]\s*[:łl]?\s*)+", "", value, flags=re.IGNORECASE)
+    trimmed = re.sub(r"^(?:tytu[łl](?:em)?\s*[:łl]?\s*)+", "", value, flags=re.IGNORECASE)
+    trimmed = re.sub(r"^(?:em|i|e)\s+(?=\S{3})", "", trimmed)
     trimmed = re.split(
-        r"\b(?:typ\s*operacji|kana[łl]|potwierdzenie ma charakter|bank nie ponosi|status|numer\s*referencyjny|numer\s*transakcji|nr\s*ref\.?|waluta|tryb|data\s*(?:wygenerowania|transakcji|operacji)|kwota|z\s*powa[żz]aniem)\b",
+        r"\b(?:dokument\s+jest\s+wydrukiem|typ\s*transakcji|strona\s*\d|s\S?gnature|dokument\s+podpisan\w*|typ\s*operacji|kana[łl]|potwierdzenie ma charakter|bank nie ponosi|status|numer\s*referencyjny|numer\s*transakcji|nr\s*ref\.?|waluta|tryb|data\s*(?:wygenerowania|transakcji|operacji)|kwota|z\s*powa[żz]aniem)\b",
         trimmed,
         maxsplit=1,
         flags=re.IGNORECASE,

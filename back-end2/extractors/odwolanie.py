@@ -22,7 +22,7 @@ def extract_odwolanie(document, rules):
     return {
         "OdwolanieKIO": {
             "data": appeal_date,
-            "czynnosc_dzien": _act_date(act),
+            "czynnosc_dzien": _act_date(act, flat),
             "czynnosc_powod_id": powod_id,
             "czynnosc_opis": powod_opis,
             "miejscowosc": city,
@@ -54,7 +54,7 @@ def _appellant(block, ocr=False):
 def _representative(block):
     name = None
     match = re.search(
-        r"reprezentowan\w+\s+przez(?:\s+pe[łl]nomocnika)?\s*:\s*(.+?)(?:\n|adres do korespondencji)",
+        r"reprezentowan\w+\s+przez(?:\s+pe[łl]\w{3,7}ika)?\s*:\s*(.+?)(?:\n|adres do korespondencji)",
         block,
         re.IGNORECASE | re.DOTALL,
     )
@@ -75,7 +75,7 @@ def _representative(block):
         name = person_name(first)
     firm = None
     address = re.search(
-        r"adres do korespondencji\s*:\s*(.+?),\s*ul\.",
+        r"adres do korespondencji\s*:\s*(.+?)(?:,\s*|\s+)ul\.",
         compact(block),
         re.IGNORECASE,
     )
@@ -176,11 +176,16 @@ def _reference(window):
     return match.group(1).rstrip(".,;") if match else None
 
 
-def _act_date(act):
-    match = re.search(r"w dniu\s+(.{6,40}?\d{4})", act, re.IGNORECASE)
-    if not match:
-        return None
-    return parse_date(match.group(1))
+def _act_date(act, flat=""):
+    for source, pattern in (
+        (act, r"w dniu\s+(.{6,40}?\d{4})"),
+        (act, r"pismem\s+z\s+(?:dnia\s+)?(.{6,30}?\d{4})"),
+        (flat, r"przekazan\w*\s+Odwo[łl]uj\w*\s+w dniu\s+(.{6,30}?\d{4})"),
+    ):
+        match = re.search(pattern, source, re.IGNORECASE)
+        if match and parse_date(match.group(1)):
+            return parse_date(match.group(1))
+    return None
 
 
 def _act_window(flat):
@@ -200,10 +205,10 @@ def _act_window(flat):
 
 
 def _header_place_date(text):
-    match = re.search(
-        r"([A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż-]+),\s*(?:dnia\s+)?(\d{1,2}(?:[./-]\d{1,2}[./-]\d{4}|\s+[A-Za-ząćęłńóśźż]+\s+\d{4}))",
-        text,
-    )
+    date = r"(?:dnia\s+)?(\d{1,2}(?:[./-]\d{1,2}[./-]\d{4}|\s+[A-Za-ząćęłńóśźż]+\s+\d{4}))"
+    match = re.search(rf"([A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż-]+),\s*{date}", text)
+    if not match:
+        match = re.search(rf"(?m)^([A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż-]+)\s+{date}", text[:300])
     if not match:
         return None, None
     return match.group(1), parse_date(match.group(2))

@@ -64,6 +64,9 @@ def _structure(name, text):
             "przelew elixir",
             "przelew z rachunku",
             "rachunek zleceniodawcy",
+            "rachunek kontrahenta",
+            "dane kontrahenta",
+            "dane zleceniodawcy",
             "elixir",
         )
         has_phrase = any(_fold(phrase) in text for phrase in phrases)
@@ -85,5 +88,9 @@ def _heading(text, phrase, exact=False):
         if not letters:
             continue
         if letters == target or (not exact and letters.startswith(target)):
+            return True
+        # OCR leaves one- or two-letter specks beside a heading, e.g. "| | ODWOŁANIE aa".
+        words = [re.sub(r"[^a-ząćęłńóśźż]", "", word) for word in line.lower().split()]
+        if "".join(word for word in words if len(word) > 2) == target:
             return True
     return False

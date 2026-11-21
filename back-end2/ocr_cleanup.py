@@ -28,6 +28,20 @@ _BROKEN_ID = re.compile(
 )
 
 
+_JUNK = r"[|*_©®~`\\/{}\[\]<>=+°¶•]"
+_EDGE_PUNCT = r"[.,:;'\"]"
+_LEAD = re.compile(rf"^(?:{_JUNK}+|(?:{_EDGE_PUNCT}|[-—])+(?=\s)|[A-Za-z]{{1,2}}(?=\s+(?:{_JUNK}|{_EDGE_PUNCT})(?:\s|$)))\s*")
+_TRAIL = re.compile(
+    rf"(?:\s+(?:{_JUNK}+|{_EDGE_PUNCT}+)|\s+{_JUNK}+\s*[A-Za-z]{{1,3}}"
+    r"|(?<=[a-ząćęłńóśźż]{2})\s+(?![IVX]+$)[A-ZĄĆĘŁŃÓŚŹŻ]{1,2})$"
+)
+_LONE = re.compile(rf"(?<=\S)\s+(?:{_JUNK}+|[.,:;]+)(?=\s+\S)")
+_REPEAT = re.compile(r"\b([a-z])(?:\s+\1\b)+")
+_AT_SURE = re.compile(r"(?<=[a-z0-9])(?:\(OQ|\(a\s?|\s?[Q©®G]\s?)(?=[a-z][a-z0-9-]*\.[a-z])")
+_TLD = re.compile(r"(?<=[a-z0-9-]\.)(?:e[a-z]amp[a-z][ceęe]|[ce]x[a-z]mpl[a-zę]|ex[a-z]mple|examp[a-z]e)\b")
+_DOMAIN = re.compile(r"(?:@|www\.\s?)([a-z][a-z0-9-]*\.[a-z]{2,}(?:\.[a-z]{2,})?)")
+
+
 def cleanup_ocr(text: str) -> str:
     """Fix digit lookalikes, join split IBANs and NIPs, and tidy quotes."""
     if not text:
@@ -36,9 +50,45 @@ def cleanup_ocr(text: str) -> str:
     cleaned = cleaned.translate(_QUOTES)
     cleaned = re.sub(r"[ \t]+", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = "\n".join(_tidy_line(line) for line in cleaned.split("\n"))
     cleaned = _RUN.sub(_fix_run, cleaned)
     cleaned = _BROKEN_ID.sub(_join_id, cleaned)
+    cleaned = _fix_words(cleaned)
+    cleaned = _repair_emails(cleaned)
     return cleaned.strip()
+
+
+def _tidy_line(line: str) -> str:
+    """Drop margin specks, table rules and stray letters Tesseract adds at line edges."""
+    previous = None
+    while previous != line:
+        previous = line
+        line = line.strip()
+        line = _LEAD.sub("", line)
+        line = _TRAIL.sub("", line)
+    line = _LONE.sub("", line)
+    line = _REPEAT.sub(r"\1", line)
+    return "" if re.fullmatch(r"[A-Za-z]{1,2}", line) else line
+
+
+def _fix_words(text: str) -> str:
+    text = re.sub(r"\b([Ss]p\.)\s?[zZ]\s?[0oO]\.\s?[0oO]\.", r"\1 z o.o.", text)
+    text = re.sub(r"\b([Ss]p\.)\s?([kKjJpP])\.(?=\s|$|,)", lambda m: f"{m.group(1)} {m.group(2).lower()}.", text)
+    text = re.sub(r"(?<=\w) 6 (?=Partner)", " & ", text)
+    text = re.sub(r"(?<=[a-ząćęłńóśźż])- (?=[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż])", "-", text)
+    return text
+
+
+def _repair_emails(text: str) -> str:
+    text = _TLD.sub("example", text)
+    text = re.sub(r"(?<=[a-z0-9-])\|(?=[a-z-]*-kancelaria)", "l", text)
+    text = re.sub(r"(?<=[a-z0-9-])ł(?=aria\.)", "l", text)
+    text = _AT_SURE.sub("@", text)
+    domains = sorted({match.group(1) for match in _DOMAIN.finditer(text)}, key=len, reverse=True)
+    for domain in domains:
+        pattern = re.compile(rf"(?<=[a-z0-9])(?:\(o|\(a\s?|ta\s|a\s|[ao]|ść\s?|fii|Gr|gó)(?={re.escape(domain)})")
+        text = pattern.sub("@", text)
+    return text
 
 
 def _fix_run(match: re.Match[str]) -> str:
