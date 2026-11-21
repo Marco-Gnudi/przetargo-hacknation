@@ -439,6 +439,68 @@ th {
   font-weight: 650;
 }
 
+.pill-ok {
+  background: #e5f2e8;
+  color: #1d6b3a;
+}
+
+.pill-unrecognized,
+.pill-error {
+  background: #fde8e6;
+  color: var(--red);
+}
+
+.result + .result {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.result h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.field-list {
+  display: grid;
+  grid-template-columns: minmax(140px, 34%) 1fr;
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.field-list dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.field-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.field-list .is-null {
+  color: var(--danger);
+  font-family: ui-monospace, monospace;
+}
+
+.json-view {
+  margin: 12px 0 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #172033;
+  color: #f7f8fa;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .btn:focus-visible,
 .dropzone:focus-visible,
 .segment button:focus-visible,

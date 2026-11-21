@@ -35,10 +35,27 @@ const copy = {
     cases: "Sprawy",
     casesHint: "Każdy zestaw dokumentów przesłany w tej sesji.",
     clear: "Wyczyść sesję",
-    colPdfs: "Liczba PDF",
-    colCompany: "Firma",
+    colFile: "Plik",
+    colType: "Rodzaj",
     colStatus: "Status",
     noCases: "Brak spraw.",
+    processingNow: "Przetwarzanie…",
+    apiError: "Nie udało się połączyć z ekstraktorem. Uruchom back-end2/start.sh i otwórz http://127.0.0.1:8000.",
+    bielikNote: "Model Bielik nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
+    unrecognized: "Dokument nie został rozpoznany. Ekstraktor nie przypisał go do odwołania, pełnomocnictwa ani potwierdzenia przelewu.",
+    copyJson: "Kopiuj JSON",
+    copied: "Skopiowano",
+    downloadJson: "Pobierz JSON",
+    showJson: "Pokaż JSON",
+    showFields: "Pokaż pola",
+    nullValue: "null",
+    types: {
+      odwolanie: "Odwołanie",
+      pelnomocnictwo: "Pełnomocnictwo",
+      przelew: "Potwierdzenie przelewu",
+      unknown: "Nierozpoznany dokument",
+    },
+    statuses: { ok: "Przetworzono", unrecognized: "Nierozpoznany", error: "Błąd" },
     remove: "Usuń",
     pdfOnly: "Można dodać tylko pliki PDF. Pominięto: {names}",
     already: "Te pliki PDF są już dodane.",
@@ -70,10 +87,27 @@ const copy = {
     cases: "Cases",
     casesHint: "Every set of documents submitted in this session.",
     clear: "Clear session",
-    colPdfs: "PDFs",
-    colCompany: "Company",
+    colFile: "File",
+    colType: "Type",
     colStatus: "Status",
     noCases: "No cases yet.",
+    processingNow: "Processing…",
+    apiError: "The extractor could not be reached. Start back-end2/start.sh and open http://127.0.0.1:8000.",
+    bielikNote: "Bielik is not connected. This run used the deterministic extractor.",
+    unrecognized: "The document was not recognized. It was not classified as an appeal, a power of attorney, or a transfer confirmation.",
+    copyJson: "Copy JSON",
+    copied: "Copied",
+    downloadJson: "Download JSON",
+    showJson: "Show JSON",
+    showFields: "Show fields",
+    nullValue: "null",
+    types: {
+      odwolanie: "Appeal",
+      pelnomocnictwo: "Power of attorney",
+      przelew: "Transfer confirmation",
+      unknown: "Unrecognized document",
+    },
+    statuses: { ok: "Processed", unrecognized: "Unrecognized", error: "Error" },
     remove: "Remove",
     pdfOnly: "Only PDF files can be added. Skipped: {names}",
     already: "Those PDFs are already attached.",
@@ -90,6 +124,7 @@ const state = {
   submissions: [],
   nextId: 1,
   notice: null,
+  busy: false,
 };
 
 langButtons.forEach((button) => {
@@ -183,23 +218,6 @@ function applyCopy() {
   renderOutputs();
 }
 
-function pdfCountPhrase(count) {
-  if (state.lang === "en") return `${count} PDF${count === 1 ? "" : "s"}`;
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-  const word = count === 1 ? "plik PDF" : mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20) ? "pliki PDF" : "plików PDF";
-  return `${count} ${word}`;
-}
-
-function queuedSentence(submission) {
-  const mode = t("modeName")[submission.mode];
-  const count = pdfCountPhrase(submission.count);
-  if (state.lang === "pl") {
-    return `${count} w kolejce: ${mode}. Kompletność pojawi się tutaj, gdy podłączymy ekstrakcję.`;
-  }
-  return `${count} queued for ${mode}. Completeness will appear here once extraction is connected.`;
-}
-
 function renderNotice() {
   if (!state.notice) {
     inputMessage.textContent = "";
@@ -287,49 +305,68 @@ function renderFiles() {
       fileList.append(row);
     });
   }
-  submitButton.disabled = state.files.length === 0;
+  submitButton.disabled = state.busy || state.files.length === 0;
+  submitButton.textContent = state.busy ? t("processingNow") : t("process");
 }
 
-function submitFiles() {
-  if (state.files.length === 0) return;
-
-  state.submissions.push({
-    count: state.files.length,
-    names: state.files.map((item) => item.file.name),
-    mode: state.mode,
-  });
-  state.files = [];
+async function submitFiles() {
+  if (state.files.length === 0 || state.busy) return;
+  const selected = state.files.slice();
+  const mode = state.mode;
+  state.busy = true;
   state.notice = null;
-  renderNotice();
   renderFiles();
-  renderOutputs();
+
+  const form = new FormData();
+  selected.forEach((item) => form.append("files", item.file, item.file.name));
+  try {
+    const response = await fetch("/api/extract/batch", { method: "POST", body: form });
+    if (!response.ok) throw new Error(String(response.status));
+    const body = await response.json();
+    state.submissions.push({ mode, results: body.results || [] });
+    state.files = [];
+  } catch {
+    state.notice = { key: "apiError" };
+  } finally {
+    state.busy = false;
+    renderNotice();
+    renderFiles();
+    renderOutputs();
+  }
 }
 
 function renderOutputs() {
+  const results = state.submissions.flatMap((submission) => submission.results || []);
   const latest = state.submissions[state.submissions.length - 1];
+
+  summary.replaceChildren();
   if (!latest) {
-    summary.replaceChildren(placeholder("summaryEmpty"));
-    detail.replaceChildren(placeholder("fieldsEmpty"));
+    summary.append(placeholder("summaryEmpty"));
   } else {
-    summary.innerHTML = "";
+    const recognized = latest.results.filter((item) => item.status === "ok").length;
+    const unrecognized = latest.results.filter((item) => item.status === "unrecognized").length;
+    const failed = latest.results.filter((item) => item.status === "error").length;
     const text = document.createElement("p");
     text.className = "summary-text";
-    text.textContent = queuedSentence(latest);
+    text.textContent = summarySentence(recognized, unrecognized, failed);
     summary.append(text);
+    if (latest.mode === "bielik") {
+      const note = document.createElement("p");
+      note.className = "placeholder";
+      note.textContent = t("bielikNote");
+      summary.append(note);
+    }
+  }
 
-    detail.innerHTML = "";
-    const list = document.createElement("ul");
-    list.className = "detail-list";
-    latest.names.forEach((name) => {
-      const item = document.createElement("li");
-      item.textContent = name;
-      list.append(item);
-    });
-    detail.append(list);
+  detail.replaceChildren();
+  if (!latest) {
+    detail.append(placeholder("fieldsEmpty"));
+  } else {
+    latest.results.forEach((item) => detail.append(renderResult(item)));
   }
 
   resultsBody.replaceChildren();
-  if (state.submissions.length === 0) {
+  if (results.length === 0) {
     const row = document.createElement("tr");
     row.className = "empty-row";
     const cell = document.createElement("td");
@@ -339,21 +376,141 @@ function renderOutputs() {
     resultsBody.append(row);
     return;
   }
-
-  state.submissions.forEach((submission) => {
+  results.forEach((item) => {
     const row = document.createElement("tr");
-    const countCell = document.createElement("td");
-    countCell.textContent = String(submission.count);
-    const companyCell = document.createElement("td");
-    companyCell.textContent = "—";
+    const fileCell = document.createElement("td");
+    fileCell.textContent = item.filename;
+    const typeCell = document.createElement("td");
+    typeCell.textContent = typeLabel(item.document_type);
     const statusCell = document.createElement("td");
     const pill = document.createElement("span");
-    pill.className = "pill";
-    pill.textContent = t("pending");
+    pill.className = `pill pill-${item.status}`;
+    pill.textContent = t("statuses")[item.status] || item.status;
     statusCell.append(pill);
-    row.append(countCell, companyCell, statusCell);
-    resultsBody.append(row);
+    row.append(fileCell, typeCell, statusCell);
   });
+}
+
+function summarySentence(recognized, unrecognized, failed) {
+  if (state.lang === "pl") {
+    return `Rozpoznane: ${recognized}. Nierozpoznane: ${unrecognized}. Błędy: ${failed}.`;
+  }
+  return `Recognized: ${recognized}. Unrecognized: ${unrecognized}. Errors: ${failed}.`;
+}
+
+function typeLabel(documentType) {
+  return t("types")[documentType] || t("types").unknown;
+}
+
+function renderResult(item) {
+  const article = document.createElement("article");
+  article.className = "result";
+  const heading = document.createElement("h3");
+  heading.textContent = `${item.filename} — ${typeLabel(item.document_type)}`;
+  article.append(heading);
+
+  if (item.status === "unrecognized") {
+    const note = document.createElement("p");
+    note.className = "placeholder";
+    note.textContent = t("unrecognized");
+    article.append(note);
+  } else if (item.status === "error") {
+    const note = document.createElement("p");
+    note.className = "message";
+    note.textContent = item.error || t("statuses").error;
+    article.append(note);
+  } else {
+    article.append(renderFields(item.result));
+  }
+
+  if (item.warnings && item.warnings.length) {
+    const warnings = document.createElement("p");
+    warnings.className = "placeholder";
+    warnings.textContent = item.warnings.join(" ");
+    article.append(warnings);
+  }
+
+  const raw = document.createElement("pre");
+  raw.className = "json-view";
+  raw.hidden = true;
+  raw.textContent = JSON.stringify(item.result, null, 2);
+  article.append(raw);
+
+  const actions = document.createElement("div");
+  actions.className = "result-actions";
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "btn btn-ghost";
+  toggle.textContent = t("showJson");
+  toggle.addEventListener("click", () => {
+    raw.hidden = !raw.hidden;
+    toggle.textContent = raw.hidden ? t("showJson") : t("showFields");
+  });
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.className = "btn btn-ghost";
+  copy.textContent = t("copyJson");
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(raw.textContent);
+      copy.textContent = t("copied");
+    } catch {
+      copy.textContent = t("copyJson");
+    }
+  });
+  const download = document.createElement("button");
+  download.type = "button";
+  download.className = "btn btn-ghost";
+  download.textContent = t("downloadJson");
+  download.addEventListener("click", () => downloadJson(item.filename, raw.textContent));
+  actions.append(toggle, copy, download);
+  article.append(actions);
+  return article;
+}
+
+function renderFields(value) {
+  const list = document.createElement("dl");
+  list.className = "field-list";
+  Object.entries(flattenFields(value)).forEach(([key, fieldValue]) => {
+    const term = document.createElement("dt");
+    term.textContent = key;
+    const description = document.createElement("dd");
+    if (fieldValue === null) {
+      description.className = "is-null";
+      description.textContent = t("nullValue");
+    } else {
+      description.textContent = String(fieldValue);
+    }
+    list.append(term, description);
+  });
+  return list;
+}
+
+function flattenFields(value, prefix = "", output = {}) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) output[prefix] = "[]";
+    value.forEach((item, index) => flattenFields(item, `${prefix}[${index}]`, output));
+    return output;
+  }
+  if (value && typeof value === "object") {
+    Object.entries(value).forEach(([key, child]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      flattenFields(child, path, output);
+    });
+    return output;
+  }
+  output[prefix || "value"] = value;
+  return output;
+}
+
+function downloadJson(filename, contents) {
+  const base = filename.replace(/\.pdf$/i, "") || "document";
+  const blob = new Blob([contents + "\n"], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${base}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 function placeholder(key) {

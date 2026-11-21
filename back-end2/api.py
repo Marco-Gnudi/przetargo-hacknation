@@ -1,0 +1,107 @@
+"""HTTP interface for the existing deterministic extractor.
+
+The CLI in main.py stays the evaluation entry point. This module only
+receives uploads, calls process_pdf, and deletes the temporary file.
+"""
+
+import os
+import tempfile
+from pathlib import Path
+
+from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from pipeline import load_rules, process_pdf
+
+MAX_BYTES = 20 * 1024 * 1024
+MAX_FILES = 30
+FRONTEND = Path(__file__).resolve().parents[1] / "front-end"
+RULES = load_rules()
+
+app = FastAPI(title="PrzetarGO")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8765",
+        "http://localhost:8765",
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "engine": "deterministic"}
+
+
+@app.post("/api/extract")
+async def extract(file: UploadFile = File(...)):
+    return await _process_upload(file)
+
+
+@app.post("/api/extract/batch")
+async def extract_batch(files: list[UploadFile] = File(...)):
+    selected = files[:MAX_FILES]
+    results = []
+    for upload in selected:
+        results.append(await _process_upload(upload))
+    return {"results": results, "truncated": len(files) > MAX_FILES}
+
+
+async def _process_upload(upload: UploadFile):
+    filename = Path(upload.filename or "document.pdf").name
+    data = await upload.read()
+    if not filename.lower().endswith(".pdf"):
+        return _envelope(filename, {}, None, "Only PDF files are accepted.")
+    if not data:
+        return _envelope(filename, {}, None, "The file is empty.")
+    if len(data) > MAX_BYTES:
+        return _envelope(filename, {}, None, "The file is larger than 20 MB.")
+    if not data.startswith(b"%PDF"):
+        return _envelope(filename, {}, None, "The file is not a PDF.")
+
+    handle, path = tempfile.mkstemp(suffix=".pdf")
+    try:
+        with os.fdopen(handle, "wb") as stored:
+            stored.write(data)
+        payload, diagnostic = process_pdf(path, RULES)
+        diagnostic["file"] = filename
+        return _envelope(filename, payload, diagnostic, None)
+    except Exception:
+        return _envelope(filename, {}, None, "The PDF could not be read.")
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def _envelope(filename, payload, diagnostic, error):
+    document_type = diagnostic["document_type"] if diagnostic else "unknown"
+    if error:
+        status = "error"
+    elif document_type == "unknown":
+        status = "unrecognized"
+    else:
+        status = "ok"
+    return {
+        "filename": filename,
+        "document_type": document_type,
+        "status": status,
+        "result": payload if isinstance(payload, dict) else {},
+        "warnings": list(diagnostic["warnings"]) if diagnostic else [],
+        "error": error,
+    }
+
+
+app.mount("/", StaticFiles(directory=FRONTEND, html=True), name="frontend")
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8000)

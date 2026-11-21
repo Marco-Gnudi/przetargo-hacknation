@@ -4,7 +4,26 @@ Deterministic PDF to JSON extractor for PrzetarGO. It does not call a language m
 
 The organizer asks for Python 3.13+. The modules use the standard library plus PyMuPDF and also run on Python 3.12.
 
-## Run
+## Open the website
+
+On macOS, with Python 3.13 installed:
+
+```bash
+cd back-end2
+./start.sh
+```
+
+Then open http://127.0.0.1:8000/. The same process serves the existing frontend and the extractor. Upload one or more PDFs and press **Przetwórz dokumenty**.
+
+`start.sh` creates `.venv` with `python3.13` if needed and installs `requirements.txt`. If the `python3.13` command has another name, run `PYTHON=/path/to/python3.13 ./start.sh`.
+
+The CLI is unchanged and remains the entry point for batch evaluation:
+
+```bash
+python3 main.py --input ../UZP-hacknation-task/dane --output output
+```
+
+## Run the CLI
 
 ```bash
 cd back-end2
