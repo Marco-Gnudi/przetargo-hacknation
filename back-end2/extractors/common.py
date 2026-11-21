@@ -16,21 +16,30 @@ def section(text, start, end):
 
 
 def party_name(block):
+    chunks = split_numbered(block)
+    if len(chunks) > 1:
+        block = chunks[0]
     lines = [compact(line) for line in block.splitlines() if compact(line)]
     skipped = re.compile(
-        r"^(?:odwołując\w*|zamawiając\w*|mocodawc\w*|pełnomocni\w*|\d+\)|ul\.|krs\b|nip\b|regon\b|tel\.|e-?mail\b|kontakt\b|adres\b|reprezentowan)",
+        r"^(?:odwołując\w*|zamawiając\w*|mocodawc\w*|pełnomocni\w*|\d+\)|ul\.|krs\b|nip\b|regon\b|tel\.|e-?mail\b|kontakt\b|adres\b|reprezentowan|przedsiębiorca\b|wpisan\w*|prowadząc)",
         re.IGNORECASE,
     )
     for line in lines:
-        if not re.search(r"[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż]", line):
+        if "@" in line or not re.search(r"[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż]", line):
             continue
         if skipped.match(line):
             continue
+        if re.match(r"^(?:lider|partner|konsorcjum)\b", line, re.IGNORECASE) and not re.search(
+            r"\b(?:s\.a\.|sp\.)", line, re.IGNORECASE
+        ):
+            continue
         if re.search(r"art\.\s*\d+", line, re.IGNORECASE):
             continue
-        if re.search(r"\b(?:s\.a\.|sp\.|spółka|spółdziel)", line, re.IGNORECASE):
-            name = re.split(r"\bul\.", line, maxsplit=1, flags=re.IGNORECASE)[0]
-            return name.strip(" ,;")
+        name = re.split(r"\bul\.|\bKRS\b|\bNIP\b|\bREGON\b", line, maxsplit=1, flags=re.IGNORECASE)[0]
+        name = name.strip(" ,;:-")
+        if len(name) < 3:
+            continue
+        return name
     return None
 
 
