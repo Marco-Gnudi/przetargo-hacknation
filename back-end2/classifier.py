@@ -79,7 +79,10 @@ def _structure(name, text):
         has_account = re.search(r"(?:\d[\s-]*){26}", text) is not None
         return has_phrase and has_account
     if name == "odwolanie":
-        return _heading(text, "odwolanie", exact=True) and "odwolujac" in text and "zamawiajac" in text
+        titled = _heading(text, "odwolanie", exact=True) or re.search(
+            r"(?m)^\W*odwolanie\s+(?:do|od|wobec)\b", text
+        )
+        return bool(titled) and "odwolujac" in text and "zamawiajac" in text
     if name == "pelnomocnictwo":
         return "pelnomocnictw" in text and (
             "udzielam" in text or "mocodawc" in text or "upowazniam" in text or "ustanawiam" in text

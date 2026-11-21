@@ -39,17 +39,24 @@ class ProcessedFile:
     raw: dict | None = None
 
 
-def process_file(pdf_path: Path, *, mode: str = "regular", filename: str | None = None) -> ProcessedFile:
+def process_file(
+    pdf_path: Path,
+    *,
+    mode: str = "regular",
+    filename: str | None = None,
+    document_type: str | None = None,
+) -> ProcessedFile:
     """Classify and extract one PDF. `regular` never calls the LLM.
 
     `bielik` fills from the model after the rules. `bielik_only` never runs
     a deterministic extractor: every value comes from the model.
+    A known `document_type` (e.g. from back-end2's classifier) skips classification.
     """
     if mode not in ("regular", "bielik", "bielik_only"):
         raise ValueError("mode must be regular, bielik, or bielik_only")
     text = read_pdf(pdf_path)
     use_llm = mode != "regular"
-    document_type = classify(text)
+    document_type = document_type or classify(text)
     if document_type is None:
         return ProcessedFile(filename or pdf_path.name, None, {}, {})
     if mode == "bielik_only":

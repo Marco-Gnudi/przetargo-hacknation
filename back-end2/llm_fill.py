@@ -50,7 +50,8 @@ def fill_with_bielik(
     """
     from odwolania.pipeline import process_file
 
-    processed = process_file(Path(pdf_path), mode="bielik")
+    known = document_type if document_type != "unknown" else None
+    processed = process_file(Path(pdf_path), mode="bielik", document_type=known)
     bielik = _llm_leaves(processed.data, processed.sources)
     raw_model = processed.raw if processed.raw is not None else processed.data
     if document_type == "unknown":
