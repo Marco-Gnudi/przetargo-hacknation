@@ -23,7 +23,7 @@ Copy `.env.example` to `.env` and set `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MOD
 
 Or, after the venv exists, `start.bat` with the same `--input` and `--output` arguments.
 
-Each `<input>/<case>/*.pdf` is written to `<output>/<case>/<same name>.json`.
+Each `<input>/<case>/*.pdf` is written to `<output>/<case>/<same name>.json`. The CLI fills `odwolanie` and `pelnomocnictwo` with Bielik. `przelew` stays on the rule extractor, with the model only for fields the rules leave empty.
 
 ## Smoke test (calls Bielik)
 
@@ -38,15 +38,17 @@ Reads `przyklad_01/potwierdzenie_przelewu.pdf`, asks for the przelew fields, and
 ```bat
 .venv\Scripts\python.exe scripts\eval_classifier.py
 .venv\Scripts\python.exe scripts\eval_przelew.py
+.venv\Scripts\python.exe scripts\eval_llm.py --limit 5
+.venv\Scripts\python.exe scripts\eval_llm.py
 ```
 
-The classifier is scored on `dane/`, including `negatywne/` and the decoy PDFs. The przelew eval compares all 60 cases with the expected `przelew.json` and reports whether each field came from a rule or the LLM.
+The classifier is scored on `dane/`, including `negatywne/` and the decoy PDFs. The przelew eval compares all 60 cases with the expected `przelew.json` and reports whether each field came from a rule or the LLM. `eval_llm.py` scores `odwolanie` and `pelnomocnictwo` in bielik mode (`--type` limits the type, `--limit N` the first N cases). Model replies are stored in `backend/.cache/`, which is gitignored, so a rerun with the same prompt does not call Bielik again.
 
 ## UI
 
 From the repo root, `start_ui.bat` starts the API on http://127.0.0.1:8000 and the front-end on http://127.0.0.1:8080.
 
-`POST /api/process` takes PDF files and `mode` (`regular` or `bielik`). `regular` uses rules only. `bielik` keeps the rules and asks the model only when classification or a przelew field is still empty. `GET /api/health` returns `{"status": "ok"}`.
+`POST /api/process` takes PDF files and `mode` (`regular` or `bielik`). `regular` uses rules only. `bielik` keeps the rules for classification and for przelew, and asks Bielik for `odwolanie` and `pelnomocnictwo` (and for a przelew field or a type the rules leave empty). `GET /api/health` returns `{"status": "ok"}`.
 
 ## Tests
 

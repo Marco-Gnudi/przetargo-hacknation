@@ -8,3 +8,4 @@ def test_yaml_loads_three_document_types():
         assert item.output_filename.endswith(".json")
         assert item.keywords
         assert item.fields
+        assert item.llm_prompt

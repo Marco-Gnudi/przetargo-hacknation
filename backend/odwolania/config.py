@@ -29,6 +29,7 @@ class DocumentType:
     output_filename: str
     keywords: tuple[Keyword, ...]
     fields: tuple[str, ...]
+    llm_prompt: str = ""
 
 
 @dataclass(frozen=True)
@@ -84,11 +85,15 @@ def _parse_entry(entry: object, config_path: Path) -> DocumentType:
     if not isinstance(fields, list) or not fields:
         raise ValueError(f"fields must be a non-empty list for {entry.get('id')}")
     parsed = tuple(_parse_keyword(item, entry.get("id"), config_path) for item in keywords)
+    prompt = entry.get("llm_prompt") or ""
+    if not isinstance(prompt, str):
+        raise ValueError(f"llm_prompt must be a string for {entry.get('id')} in {config_path}")
     return DocumentType(
         id=str(entry["id"]),
         output_filename=str(entry["output_filename"]),
         keywords=parsed,
         fields=tuple(str(item) for item in fields),
+        llm_prompt=prompt.strip(),
     )
 
 

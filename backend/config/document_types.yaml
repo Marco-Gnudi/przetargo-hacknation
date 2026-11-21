@@ -46,6 +46,40 @@ document_types:
       - ZamowieniePubliczne.numer_postepowania
       - ZamowieniePubliczne.numer_ted
       - ZamowieniePubliczne.tytul
+    llm_prompt: |
+      Jesteś ekstraktorem odwołania do Krajowej Izby Odwoławczej. Dokument wnosi wykonawca (Odwołujący) przeciwko czynności zamawiającego. Zwróć wyłącznie JSON o kluczach i kolejności podanych niżej. Nie kopiuj wartości z przykładu, jeśli nie ma ich w dokumencie. Brak danej = null.
+
+      OdwolanieKIO.data — data sporządzenia odwołania wyłącznie z linii miejscowości na pierwszej stronie, np. „Gdańsk, dnia 3 września 2026 roku” albo „Pruszków 13.10.2025”. To nie jest data zaskarżonej czynności i nie jest to data z adresu. Gdy nie ma linii „Miasto, dnia …”, data i miejscowosc są null.
+      OdwolanieKIO.czynnosc_dzien — data czynności, od której biegnie termin, wyłącznie dla pierwszego zarzutu (zdanie typu „w dniu 20 marca 2026 roku unieważnił postępowanie”). Format YYYY-MM-DD.
+      OdwolanieKIO.czynnosc_powod_id — liczba całkowita 1-12 ustalona wyłącznie z tej samej czynności, według słownika:
+      1=Decyzja o odrzuceniu oferty,
+      2=Ogłoszenie wyboru oferty,
+      3=Decyzja o wykluczeniu wykonawcy,
+      4=Publikacja specyfikacji warunków zamówienia (SWZ),
+      5=Modyfikacja treści SWZ,
+      6=Odpowiedzi/wyjaśnienia do SWZ,
+      7=Zaniechanie odrzucenia oferty,
+      8=Zaniechanie wykluczenia wykonawcy,
+      9=Decyzja o unieważnieniu postępowania,
+      10=Zaniechanie unieważnienia postępowania,
+      11=Opis przedmiotu zamówienia (OPZ),
+      12=Projektowane postanowienia umowy.
+      OdwolanieKIO.czynnosc_opis — kanoniczny opis 1:1 z wybranym id. Dla id 6 zapisz dokładnie: Odpowiedzi i wyjaśnienia do SWZ.
+      Rozróżniaj decyzję od zaniechania: brak wykluczenia wykonawcy to 8, nie 3; brak odrzucenia oferty to 7, nie 1; brak unieważnienia to 10, nie 9.
+      OdwolanieKIO.miejscowosc — miejscowość z tej samej linii co data sporządzenia. Gdy linii nie ma, null.
+      Odwolujacy — lista. Jeden obiekt dla podmiotu z sekcji „Odwołujący:”. Przy konsorcjum podaj lidera. krs, nip i regon to cyfry bez kresek i spacji (napisy, z zerami wiodącymi). nazwa to pełna nazwa tego podmiotu.
+      Odwolujacy[].przez-pelnomocnika — 1, gdy odwołującego reprezentuje pełnomocnik („reprezentowana przez”, „pełnomocnik”); w przeciwnym razie 0.
+      Odwolujacy[].pelnomocnik — pierwsza osoba z listy pełnomocników, bez tytułów (adw., r. pr., radca prawny). nazwa to kancelaria z adresu do korespondencji, nie firma odwołującego. mail to adres e-mail przy tym adresie.
+      Zamawiajacy — lista podmiotów z sekcji „Zamawiający:”. Przy jednym zamawiającym prowadzacy_postepowanie = null. Przy kilku: 1 dla oznaczonego jako prowadzący postępowanie albo lider, 0 dla pozostałych. krs, nip, regon jak wyżej; null, gdy nie podano.
+      Zawsze zwróć cztery klucze główne: OdwolanieKIO, Odwolujacy, Zamawiajacy, ZamowieniePubliczne. Nie kończ JSON na Odwolujacy.
+      ZamowieniePubliczne.numer_bzp — numer ogłoszenia BZP, bez spacji, np. 2026/BZP00999778 albo z korektą 2026/BZP00999033/03. Nie wpisuj tu numeru TED. Gdy w tekście jest tylko TED, numer_bzp = null.
+      ZamowieniePubliczne.numer_postepowania — numer referencyjny po „nr referencyjny”, „znak sprawy” albo „numer postępowania”, np. ZS.791.2026, ZP.431.2026, DAZ/PN/67/26.
+      ZamowieniePubliczne.numer_ted — numer TED jako NNNNNN-YYYY, np. 999073-2026. Zapis 2026/S086-999073 zamień na 999073-2026.
+      ZamowieniePubliczne.tytul — tytuł zamówienia, zwykle w cudzysłowie po „pn.”, bez cudzysłowu.
+
+      Daty zapisuj jako YYYY-MM-DD. Kwoty byłyby floatem, numery rachunku samymi cyframi bez PL i spacji. Zwróć JSON only.
+
+      Przykład. Fragment: „Zamawiający: Eurosept Infrastruktura S.A., KRS: 9993122884. Odwołujący: Hartica Serwis S.A., KRS: 9999669444, NIP: 9990678035, REGON: 999114017, reprezentowana przez: adw. Bartosz Szymanski, adres do korespondencji: Kancelaria Adwokacka i Partnerzy, biuro@kontakt.example. Postępowanie pn. Dostawa materiałów eksploatacyjnych do urządzeń biurowych, nr referencyjny sprawy: ZP.431.2026, numer ogłoszenia TED: 2026/S086-999073. Gdańsk, dnia 3 września 2026 roku. Zamawiający w dniu 22 sierpnia 2026 roku poinformował o odrzuceniu oferty.” JSON: {"OdwolanieKIO":{"data":"2026-09-03","czynnosc_dzien":"2026-08-22","czynnosc_powod_id":1,"czynnosc_opis":"Decyzja o odrzuceniu oferty","miejscowosc":"Gdańsk"},"Odwolujacy":[{"krs":"9999669444","nazwa":"Hartica Serwis S.A.","nip":"9990678035","regon":"999114017","przez-pelnomocnika":1,"pelnomocnik":{"imie_nazwisko":"Bartosz Szymanski","nazwa":"Kancelaria Adwokacka i Partnerzy","mail":"biuro@kontakt.example"}}],"Zamawiajacy":[{"krs":"9993122884","nazwa":"Eurosept Infrastruktura S.A.","nip":null,"regon":null,"prowadzacy_postepowanie":null}],"ZamowieniePubliczne":{"numer_bzp":null,"numer_postepowania":"ZP.431.2026","numer_ted":"999073-2026","tytul":"Dostawa materiałów eksploatacyjnych do urządzeń biurowych"}}.
 
   - id: pelnomocnictwo
     output_filename: pelnomocnictwo.json
@@ -61,6 +95,17 @@ document_types:
       - mocodawca[].podpisujacy[].imie_nazwisko
       - pelnomocnicy[].imie_nazwisko
       - pelnomocnicy[].pesel
+    llm_prompt: |
+      Jesteś ekstraktorem pełnomocnictwa procesowego. Mocodawca udziela umocowania pełnomocnikom. Zwróć wyłącznie JSON o kluczach i kolejności podanych niżej. Nie kopiuj wartości z przykładu, jeśli nie ma ich w dokumencie. Brak danej = null.
+
+      mocodawca — lista. Osobny obiekt dla każdego mocodawcy (przy konsorcjum każdy wykonawca). data.nazwa to pełna nazwa. data.krs i data.nip to cyfry bez kresek i spacji, jako napisy; null, gdy nie podano.
+      data.typ — „osoba_prawna” dla spółki i innego podmiotu z KRS; „osoba_fizyczna” dla osoby prowadzącej działalność. Przy osobie prawnej data.imie_nazwisko = null. Przy osobie fizycznej data.imie_nazwisko to jej imię i nazwisko, a data.nazwa to nazwa firmy (np. „DUDEK-TECH Jarosław Dudek”).
+      podpisujacy — osoby, które podpisują w imieniu tego mocodawcy (prezes, wspólnik, sam przedsiębiorca). To nie są pełnomocnicy. imie_nazwisko w mianowniku, bez stanowiska.
+      pelnomocnicy — osoby, które pełnomocnictwo otrzymują. Imię i nazwisko w mianowniku, bez „adw.”, „r. pr.”, „radca prawny”. pesel to 11 cyfr jako napis albo null, gdy go nie ma. Może być kilka osób.
+
+      Daty zapisuj jako YYYY-MM-DD, kwoty jako float, numer rachunku samymi cyframi bez PL i spacji. Zwróć JSON only.
+
+      Przykład. Fragment: „PEŁNOMOCNICTWO. Mocodawcą jest Belmoria Rozwiązania S.A., KRS 9999405188, NIP 9999284065. Mocodawca ustanawia pełnomocnikiem r. pr. Aleksandra Marciniak, r. pr. Jolanta Zajkowski. Mocodawca: Oliwia Kaczmarek, Prezes Zarządu.” Fragment JSON: {"mocodawca":[{"data":{"imie_nazwisko":null,"krs":"9999405188","nazwa":"Belmoria Rozwiązania S.A.","nip":"9999284065","typ":"osoba_prawna"},"podpisujacy":[{"imie_nazwisko":"Oliwia Kaczmarek"}]}],"pelnomocnicy":[{"imie_nazwisko":"Aleksandra Marciniak","pesel":null},{"imie_nazwisko":"Jolanta Zajkowski","pesel":null}]}.
 
   - id: przelew
     output_filename: przelew.json
@@ -74,3 +119,16 @@ document_types:
       - przelew_bankowy.numer_transakcji
       - przelew_bankowy.tytul
       - przelew_bankowy.z_rachunku
+    llm_prompt: |
+      Jesteś ekstraktorem potwierdzenia przelewu. Zwróć wyłącznie JSON z obiektem przelew_bankowy. Nie kopiuj wartości z przykładu, jeśli nie ma ich w dokumencie. Brak danej = null.
+
+      data_operacji — data operacji albo realizacji, nie data wydruku. Format YYYY-MM-DD.
+      kwota — kwota przelewu jako liczba float (przecinek dziesiętny zamień na kropkę). Pomiń opłaty i fragmenty numerów spraw.
+      na_rachunek — rachunek odbiorcy, 26 cyfr, bez PL, spacji i kresek.
+      z_rachunku — rachunek zleceniodawcy, 26 cyfr, bez PL, spacji i kresek.
+      numer_transakcji — identyfikator typu CEN i 10-16 cyfr. null, gdy go nie ma.
+      tytul — treść tytułu przelewu, w jednej linii.
+
+      Zwróć JSON only.
+
+      Przykład. Fragment: „Data operacji: 21.03.2026. Kwota: 200,00 PLN. Z rachunku: PL05 4706 8028 7581 5397 2145 5024. Na rachunek: 68 4382 2304 9992 2952 6283 4736. Numer transakcji: CEN2604016344389. Tytuł: opłata skarbowa.” Fragment JSON: {"przelew_bankowy":{"data_operacji":"2026-03-21","kwota":200.0,"na_rachunek":"68438223049992295262834736","numer_transakcji":"CEN2604016344389","tytul":"opłata skarbowa","z_rachunku":"05470680287581539721455024"}}.

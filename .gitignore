@@ -24,3 +24,5 @@ local.properties
 /captures
 *.apk
 *.aab
+# Cached Bielik responses (prompt + text hash)
+backend/.cache/

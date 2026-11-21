@@ -8,12 +8,17 @@ from pathlib import Path
 
 from odwolania.classifier import classify, classify_with_llm
 from odwolania.extractors.przelew import extract_przelew
+from odwolania.llm_extractor import extract as extract_llm
 from odwolania.pdf_reader import read_pdf
+
+_LLM_TYPES = ("odwolanie", "pelnomocnictwo")
 
 
 def extract(document_type: str, text: str) -> dict:
     if document_type == "przelew":
         return extract_przelew(text).data
+    if document_type in _LLM_TYPES:
+        return extract_llm(document_type, text).data
     return {}
 
 
@@ -51,6 +56,9 @@ def process_file(pdf_path: Path, *, mode: str = "regular", filename: str | None 
 def _extract(document_type: str, text: str, *, use_llm: bool) -> tuple[dict, dict[str, str]]:
     if document_type == "przelew":
         extracted = extract_przelew(text, use_llm=use_llm)
+        return extracted.data, extracted.sources
+    if use_llm and document_type in _LLM_TYPES:
+        extracted = extract_llm(document_type, text)
         return extracted.data, extracted.sources
     return {}, {}
 
