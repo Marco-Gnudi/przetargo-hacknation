@@ -40,7 +40,8 @@ const copy = {
     colStatus: "Status",
     noCases: "Brak spraw.",
     processingNow: "Przetwarzanie…",
-    apiError: "Nie udało się połączyć z ekstraktorem. Uruchom back-end2/start.sh i otwórz http://127.0.0.1:8000.",
+    apiError: "Ekstraktor nie działa. W drugim terminalu uruchom back-end2/start.sh i kliknij Przetwórz dokumenty ponownie.",
+    filesTotal: "{count} plików · {size}",
     bielikNote: "Model Bielik nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
     unrecognized: "Dokument nie został rozpoznany. Ekstraktor nie przypisał go do odwołania, pełnomocnictwa ani potwierdzenia przelewu.",
     copyJson: "Kopiuj JSON",
@@ -92,7 +93,8 @@ const copy = {
     colStatus: "Status",
     noCases: "No cases yet.",
     processingNow: "Processing…",
-    apiError: "The extractor could not be reached. Start back-end2/start.sh and open http://127.0.0.1:8000.",
+    apiError: "The extractor is not running. In another terminal run back-end2/start.sh, then press Process documents again.",
+    filesTotal: "{count} files · {size}",
     bielikNote: "Bielik is not connected. This run used the deterministic extractor.",
     unrecognized: "The document was not recognized. It was not classified as an appeal, a power of attorney, or a transfer confirmation.",
     copyJson: "Copy JSON",
@@ -236,28 +238,36 @@ function selectMode(mode) {
   });
 }
 
-function addFiles(fileListLike) {
+function apiBase() {
+  if (location.protocol === "http:" && (location.hostname === "127.0.0.1" || location.hostname === "localhost") && location.port === "8000") {
+    return "";
+  }
+  return "http://127.0.0.1:8000";
+}
+
+async function addFiles(fileListLike) {
   const incoming = Array.from(fileListLike || []);
   if (incoming.length === 0) return;
 
   const rejected = [];
   let added = 0;
 
-  incoming.forEach((file) => {
+  for (const file of incoming) {
     if (!isPdf(file)) {
       rejected.push(file.name);
-      return;
+      continue;
     }
+    const size = await fileByteSize(file);
     const duplicate = state.files.some(
       (item) =>
         item.file.name === file.name &&
-        item.file.size === file.size &&
+        item.size === size &&
         item.file.lastModified === file.lastModified
     );
-    if (duplicate) return;
-    state.files.push({ id: state.nextId++, file });
+    if (duplicate) continue;
+    state.files.push({ id: state.nextId++, file, size });
     added += 1;
-  });
+  }
 
   if (rejected.length > 0) {
     state.notice = { key: "pdfOnly", names: rejected };
@@ -278,9 +288,16 @@ function isPdf(file) {
 
 function renderFiles() {
   fileList.replaceChildren();
+  const total = state.files.reduce((sum, item) => sum + item.size, 0);
   if (state.files.length === 0) {
     fileList.hidden = true;
   } else {
+    const summary = document.createElement("li");
+    summary.className = "file-total";
+    summary.textContent = t("filesTotal")
+      .replace("{count}", String(state.files.length))
+      .replace("{size}", formatSize(total));
+    fileList.append(summary);
     fileList.hidden = false;
     state.files.forEach((item) => {
       const row = document.createElement("li");
@@ -289,7 +306,7 @@ function renderFiles() {
       name.textContent = item.file.name;
       const size = document.createElement("span");
       size.className = "file-size";
-      size.textContent = formatSize(item.file.size);
+      size.textContent = formatSize(item.size);
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "remove-file";
@@ -320,7 +337,7 @@ async function submitFiles() {
   const form = new FormData();
   selected.forEach((item) => form.append("files", item.file, item.file.name));
   try {
-    const response = await fetch("/api/extract/batch", { method: "POST", body: form });
+    const response = await fetch(`${apiBase()}/api/extract/batch`, { method: "POST", body: form });
     if (!response.ok) throw new Error(String(response.status));
     const body = await response.json();
     state.submissions.push({ mode, results: body.results || [] });
@@ -532,8 +549,18 @@ function resetAll() {
 
 applyCopy();
 
+async function fileByteSize(file) {
+  if (file.size > 0) return file.size;
+  try {
+    return (await file.arrayBuffer()).byteLength;
+  } catch {
+    return 0;
+  }
+}
+
 function formatSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

@@ -317,9 +317,19 @@ a {
   white-space: nowrap;
 }
 
+.file-total {
+  display: block;
+  padding-bottom: 4px;
+  color: var(--ink);
+  font-weight: 650;
+}
+
 .file-size {
-  color: var(--muted);
+  color: var(--ink);
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  white-space: nowrap;
 }
 
 .remove-file {
