@@ -1,0 +1,73 @@
+# Document types for Odwołania2JSON.
+# Add a type by appending one entry. Do not change Python to register it.
+# output_filename is the canonical schema name (oczekiwane-json/<output_filename>).
+# keywords are matched against document text only, never the file name.
+document_types:
+  - id: odwolanie
+    output_filename: odwolanie.json
+    keywords:
+      - odwołanie
+      - odwolanie
+      - odwołujący
+      - odwolujacy
+      - Krajowa Izba Odwoławcza
+      - zarzut
+    fields:
+      - OdwolanieKIO.data
+      - OdwolanieKIO.czynnosc_dzien
+      - OdwolanieKIO.czynnosc_powod_id
+      - OdwolanieKIO.czynnosc_opis
+      - OdwolanieKIO.miejscowosc
+      - Odwolujacy[].krs
+      - Odwolujacy[].nazwa
+      - Odwolujacy[].nip
+      - Odwolujacy[].regon
+      - Odwolujacy[].przez-pelnomocnika
+      - Odwolujacy[].pelnomocnik.imie_nazwisko
+      - Odwolujacy[].pelnomocnik.nazwa
+      - Odwolujacy[].pelnomocnik.mail
+      - Zamawiajacy[].krs
+      - Zamawiajacy[].nazwa
+      - Zamawiajacy[].nip
+      - Zamawiajacy[].regon
+      - Zamawiajacy[].prowadzacy_postepowanie
+      - ZamowieniePubliczne.numer_bzp
+      - ZamowieniePubliczne.numer_postepowania
+      - ZamowieniePubliczne.numer_ted
+      - ZamowieniePubliczne.tytul
+
+  - id: pelnomocnictwo
+    output_filename: pelnomocnictwo.json
+    keywords:
+      - pełnomocnictwo
+      - pelnomocnictwo
+      - mocodawca
+      - pełnomocnik
+      - pelnomocnik
+      - umocowuje
+    fields:
+      - mocodawca[].data.imie_nazwisko
+      - mocodawca[].data.krs
+      - mocodawca[].data.nazwa
+      - mocodawca[].data.nip
+      - mocodawca[].data.typ
+      - mocodawca[].podpisujacy[].imie_nazwisko
+      - pelnomocnicy[].imie_nazwisko
+      - pelnomocnicy[].pesel
+
+  - id: przelew
+    output_filename: przelew.json
+    keywords:
+      - przelew
+      - potwierdzenie operacji
+      - potwierdzenie przelewu
+      - rachunek
+      - kwota
+      - tytuł przelewu
+    fields:
+      - przelew_bankowy.data_operacji
+      - przelew_bankowy.kwota
+      - przelew_bankowy.na_rachunek
+      - przelew_bankowy.numer_transakcji
+      - przelew_bankowy.tytul
+      - przelew_bankowy.z_rachunku

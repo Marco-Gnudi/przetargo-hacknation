@@ -1,0 +1,6 @@
+pypdf
+pdfplumber
+openai
+python-dotenv
+PyYAML
+pytest
