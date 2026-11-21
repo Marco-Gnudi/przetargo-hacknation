@@ -1,0 +1,38 @@
+{
+  "OdwolanieKIO": {
+    "data": "2026-09-16",
+    "czynnosc_dzien": "2026-09-01",
+    "czynnosc_powod_id": 4,
+    "czynnosc_opis": "Publikacja specyfikacji warunków zamówienia (SWZ)",
+    "miejscowosc": "Toruń"
+  },
+  "Odwolujacy": [
+    {
+      "krs": "0000916724",
+      "nazwa": "Pracownia Projektowa Lipa sp. z o.o.",
+      "nip": "7831842096",
+      "regon": "389451276",
+      "przez-pelnomocnika": 1,
+      "pelnomocnik": {
+        "imie_nazwisko": "Joanna Zielińska",
+        "nazwa": "Zielińska Kancelaria Zamówień Publicznych",
+        "mail": "biuro@zielinska-kzp.example"
+      }
+    }
+  ],
+  "Zamawiajacy": [
+    {
+      "krs": "0000321987",
+      "nazwa": "Powiat Nadwiślański",
+      "nip": "9562314780",
+      "regon": "871234560",
+      "prowadzacy_postepowanie": "Starostwo Powiatowe w Toruniu"
+    }
+  ],
+  "ZamowieniePubliczne": {
+    "numer_bzp": null,
+    "numer_postepowania": "KZ.31.2026",
+    "numer_ted": "2026/S 174-005431",
+    "tytul": "Modernizacja infrastruktury informatycznej Starostwa Powiatowego"
+  }
+}

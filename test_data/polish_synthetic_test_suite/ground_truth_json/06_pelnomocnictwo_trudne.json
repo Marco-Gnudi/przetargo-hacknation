@@ -1,0 +1,27 @@
+{
+  "mocodawca": [
+    {
+      "data": {
+        "imie_nazwisko": null,
+        "krs": "0000642391",
+        "nazwa": "Baltic Instalacje sp. z o.o.",
+        "nip": "5833410279",
+        "typ": "osoba_prawna"
+      },
+      "podpisujacy": [
+        {
+          "imie_nazwisko": "Katarzyna Lewandowska"
+        },
+        {
+          "imie_nazwisko": "Paweł Kurek"
+        }
+      ]
+    }
+  ],
+  "pelnomocnicy": [
+    {
+      "imie_nazwisko": "dr Marek Lis",
+      "pesel": null
+    }
+  ]
+}

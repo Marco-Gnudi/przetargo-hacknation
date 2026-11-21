@@ -1,0 +1,10 @@
+{
+  "przelew_bankowy": {
+    "data_operacji": "2026-08-14",
+    "kwota": 1250.5,
+    "na_rachunek": "64105000997654321098765432",
+    "numer_transakcji": "TRX260814008731",
+    "tytul": "Wadium – postępowanie ZP.14.2026 – Nova Serwis sp. z o.o.",
+    "z_rachunku": "12114020040000300201345678"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "mocodawca": [
+    {
+      "data": {
+        "imie_nazwisko": null,
+        "krs": "0000784123",
+        "nazwa": "Nova Serwis sp. z o.o.",
+        "nip": "5214098765",
+        "typ": "osoba_prawna"
+      },
+      "podpisujacy": [
+        {
+          "imie_nazwisko": "Anna Kowalska"
+        }
+      ]
+    }
+  ],
+  "pelnomocnicy": [
+    {
+      "imie_nazwisko": "Michał Nowak",
+      "pesel": null
+    }
+  ]
+}

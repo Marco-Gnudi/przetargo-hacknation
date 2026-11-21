@@ -1,0 +1,38 @@
+{
+  "OdwolanieKIO": {
+    "data": "2026-10-29",
+    "czynnosc_dzien": "2026-10-12",
+    "czynnosc_powod_id": 4,
+    "czynnosc_opis": "Publikacja specyfikacji warunków zamówienia (SWZ)",
+    "miejscowosc": "Gdańsk"
+  },
+  "Odwolujacy": [
+    {
+      "krs": "0000642391",
+      "nazwa": "Baltic Instalacje sp. z o.o.",
+      "nip": "5833410279",
+      "regon": "192837465",
+      "przez-pelnomocnika": 1,
+      "pelnomocnik": {
+        "imie_nazwisko": "dr Marek Lis",
+        "nazwa": "Kancelaria Prawna Latarnia",
+        "mail": "sekretariat@latarnia.example"
+      }
+    }
+  ],
+  "Zamawiajacy": [
+    {
+      "krs": "0000567812",
+      "nazwa": "Zarząd Dróg Powiatowych w Dębinach",
+      "nip": "5892104763",
+      "regon": "191827364",
+      "prowadzacy_postepowanie": null
+    }
+  ],
+  "ZamowieniePubliczne": {
+    "numer_bzp": "2026/BZP/00599821",
+    "numer_postepowania": "PN.88.2026",
+    "numer_ted": "2026/S 201-006772",
+    "tytul": "Przebudowa obiektów mostowych wraz z utrzymaniem infrastruktury drogowej"
+  }
+}
