@@ -48,6 +48,9 @@ def main(argv=None):
 def _cases(data):
     cases = []
     for pdf in sorted(data.rglob("*.pdf")):
+        # Scans have their own references and are scored by backend/scripts/evaluate.py.
+        if "skany" in pdf.parts:
+            continue
         reference_name = PAIRS.get(pdf.name)
         reference = pdf.with_name(reference_name) if reference_name else None
         if reference is not None and not reference.exists():

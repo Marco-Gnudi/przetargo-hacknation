@@ -19,7 +19,7 @@ from ocr_cleanup import cleanup_ocr
 
 # PSM 4 and 6 tied on skany 0001 (19/28 gold strings). These pages are one block, so PSM 6 stays.
 OCR_PSM = 6
-_OCR_CACHE_VERSION = "v1"
+_OCR_CACHE_VERSION = "v2-raw"
 _MIN_CHARS_PER_PAGE = 50
 _ENV_PATH = Path(__file__).resolve().parents[1] / "backend" / ".env"
 _CACHE: dict[tuple, PdfDocument] = {}
@@ -78,16 +78,18 @@ def _read(path: Path) -> PdfDocument:
     cached = _load_ocr_cache(path) if _disk_cache_enabled() else None
     if cached is not None:
         pdf.close()
-        return PdfDocument(str(path), pages, cached["text"], False, True, "ocr", cached["seconds"])
+        cleaned = collapse_spaced_letters(cleanup_ocr(cached["text"]))
+        return PdfDocument(str(path), pages, cleaned, False, True, "ocr", cached["seconds"])
     started = time.perf_counter()
     ocr_text = _ocr_pages(pdf)
     elapsed = round(time.perf_counter() - started, 2)
     pdf.close()
     if not ocr_text.strip():
         return PdfDocument(str(path), pages, layer, True, False, "text", elapsed)
-    cleaned = collapse_spaced_letters(cleanup_ocr(ocr_text))
+    # The cache keeps raw Tesseract output so cleanup changes apply without a re-OCR.
     if _disk_cache_enabled():
-        _save_ocr_cache(path, cleaned, elapsed)
+        _save_ocr_cache(path, ocr_text, elapsed)
+    cleaned = collapse_spaced_letters(cleanup_ocr(ocr_text))
     return PdfDocument(str(path), pages, cleaned, False, True, "ocr", elapsed)
 
 

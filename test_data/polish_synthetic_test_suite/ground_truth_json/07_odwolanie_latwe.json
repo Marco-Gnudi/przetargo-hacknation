@@ -1,0 +1,38 @@
+{
+  "OdwolanieKIO": {
+    "data": "2026-08-18",
+    "czynnosc_dzien": "2026-08-04",
+    "czynnosc_powod_id": 4,
+    "czynnosc_opis": "Publikacja specyfikacji warunków zamówienia (SWZ)",
+    "miejscowosc": "Warszawa"
+  },
+  "Odwolujacy": [
+    {
+      "krs": "0000784123",
+      "nazwa": "Nova Serwis sp. z o.o.",
+      "nip": "5214098765",
+      "regon": "369812450",
+      "przez-pelnomocnika": 1,
+      "pelnomocnik": {
+        "imie_nazwisko": "Michał Nowak",
+        "nazwa": "Kancelaria Nowak i Partnerzy",
+        "mail": "kontakt@nowak-partnerzy.example"
+      }
+    }
+  ],
+  "Zamawiajacy": [
+    {
+      "krs": "0000456712",
+      "nazwa": "Gmina Brzozówka",
+      "nip": "8121903456",
+      "regon": "052781934",
+      "prowadzacy_postepowanie": "Urząd Gminy Brzozówka"
+    }
+  ],
+  "ZamowieniePubliczne": {
+    "numer_bzp": "2026/BZP/00481234",
+    "numer_postepowania": "PN.14.2026",
+    "numer_ted": null,
+    "tytul": "Dostawa i serwis urządzeń biurowych dla Urzędu Gminy Brzozówka"
+  }
+}

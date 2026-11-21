@@ -1,0 +1,27 @@
+{
+  "mocodawca": [
+    {
+      "data": {
+        "imie_nazwisko": null,
+        "krs": "0000916724",
+        "nazwa": "Pracownia Projektowa Lipa sp. z o.o.",
+        "nip": "7831842096",
+        "typ": "osoba_prawna"
+      },
+      "podpisujacy": [
+        {
+          "imie_nazwisko": "Elżbieta Wójcik"
+        },
+        {
+          "imie_nazwisko": "Tomasz Bąk"
+        }
+      ]
+    }
+  ],
+  "pelnomocnicy": [
+    {
+      "imie_nazwisko": "Joanna Zielińska",
+      "pesel": null
+    }
+  ]
+}

@@ -24,7 +24,9 @@ def party_name(block):
         r"^(?:odwo[łl]uj[aą]c\w*|zamawiaj[aą]c\w*|mocodawc\w*|pe[łl]nomocni\w*|\d+\)|ul\.|krs\b|nip\b|regon\b|tel\.|e-?mail\b|kontakt\b|adres\b|reprezentowan|przedsi[eę]biorca\b|wpisan\w*|prowadz[aą]c)",
         re.IGNORECASE,
     )
-    for line in lines:
+    for index, line in enumerate(lines):
+        if re.search(r"\s(?:w|we|i|z|ze|na)$", line) and index + 1 < len(lines) and not skipped.match(lines[index + 1]):
+            line = f"{line} {lines[index + 1]}"
         if "@" in line or not re.search(r"[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż]", line):
             continue
         if skipped.match(line):
