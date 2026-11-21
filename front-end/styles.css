@@ -378,6 +378,42 @@ a {
   margin: 0;
 }
 
+.file-block + .file-block {
+  margin-top: 16px;
+}
+
+.file-block h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.field-list {
+  margin: 0;
+}
+
+.field-list dt {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field-list dd {
+  margin: 0;
+}
+
+.field-list .field-list {
+  margin-left: 12px;
+}
+
+.source {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .detail-list {
   margin: 0;
   padding-left: 18px;

@@ -43,8 +43,19 @@ const copy = {
     pdfOnly: "Można dodać tylko pliki PDF. Pominięto: {names}",
     already: "Te pliki PDF są już dodane.",
     pending: "Jeszcze nieprzetworzone",
+    working: "Przetwarzanie…",
+    recognised: "Rozpoznano {done} z {total}.",
+    unrecognised: "Nierozpoznany dokument",
+    noFields: "Brak pól dla tego typu.",
+    missing: "Brakujące pola",
+    failed: "Nie udało się przetworzyć dokumentów.",
+    statusDone: "Gotowe",
+    statusPartial: "Częściowo",
+    statusNone: "Nierozpoznane",
+    statusFailed: "Błąd",
+    sourceRule: "reguła",
+    sourceLlm: "bielik",
     footer: "Hacknation 2026 projekt dla Urzędu Zamówień Publicznych",
-    modeName: { regular: "przetwarzanie regularne", bielik: "Bielik" },
   },
   en: {
     title: "PrzetarGO",
@@ -78,10 +89,23 @@ const copy = {
     pdfOnly: "Only PDF files can be added. Skipped: {names}",
     already: "Those PDFs are already attached.",
     pending: "Not processed yet",
+    working: "Processing…",
+    recognised: "Recognised {done} of {total}.",
+    unrecognised: "Unrecognised document",
+    noFields: "No fields for this type yet.",
+    missing: "Missing fields",
+    failed: "The documents could not be processed.",
+    statusDone: "Done",
+    statusPartial: "Partial",
+    statusNone: "Unrecognised",
+    statusFailed: "Failed",
+    sourceRule: "rule",
+    sourceLlm: "bielik",
     footer: "HackNation 2026 project for the Public Procurement Office",
-    modeName: { regular: "regular processing", bielik: "Bielik" },
   },
 };
+
+const API_URL = "http://127.0.0.1:8000";
 
 const state = {
   mode: "regular",
@@ -90,6 +114,7 @@ const state = {
   submissions: [],
   nextId: 1,
   notice: null,
+  busy: false,
 };
 
 langButtons.forEach((button) => {
@@ -183,21 +208,16 @@ function applyCopy() {
   renderOutputs();
 }
 
-function pdfCountPhrase(count) {
-  if (state.lang === "en") return `${count} PDF${count === 1 ? "" : "s"}`;
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-  const word = count === 1 ? "plik PDF" : mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20) ? "pliki PDF" : "plików PDF";
-  return `${count} ${word}`;
-}
-
-function queuedSentence(submission) {
-  const mode = t("modeName")[submission.mode];
-  const count = pdfCountPhrase(submission.count);
-  if (state.lang === "pl") {
-    return `${count} w kolejce: ${mode}. Kompletność pojawi się tutaj, gdy podłączymy ekstrakcję.`;
-  }
-  return `${count} queued for ${mode}. Completeness will appear here once extraction is connected.`;
+function summarySentence(submission) {
+  const files = submission.result.files;
+  const done = files.filter((file) => file.type).length;
+  const line = t("recognised").replace("{done}", String(done)).replace("{total}", String(files.length));
+  const missing = [];
+  files.forEach((file) => {
+    nullFields(file.json).forEach((field) => missing.push(`${file.filename}: ${field}`));
+  });
+  if (missing.length === 0) return line;
+  return `${line} ${t("missing")}: ${missing.join(", ")}.`;
 }
 
 function renderNotice() {
@@ -287,19 +307,43 @@ function renderFiles() {
       fileList.append(row);
     });
   }
-  submitButton.disabled = state.files.length === 0;
+  submitButton.disabled = state.busy || state.files.length === 0;
+  submitButton.textContent = state.busy ? t("working") : t("process");
 }
 
-function submitFiles() {
-  if (state.files.length === 0) return;
+async function submitFiles() {
+  if (state.files.length === 0 || state.busy) return;
+
+  const files = state.files.slice();
+  const mode = state.mode;
+  const body = new FormData();
+  body.append("mode", mode);
+  files.forEach((item) => body.append("files", item.file, item.file.name));
+
+  state.busy = true;
+  state.notice = null;
+  renderNotice();
+  renderFiles();
+
+  let result = null;
+  let error = false;
+  try {
+    const response = await fetch(`${API_URL}/api/process`, { method: "POST", body });
+    if (!response.ok) throw new Error(String(response.status));
+    result = await response.json();
+  } catch {
+    error = true;
+  }
 
   state.submissions.push({
-    count: state.files.length,
-    names: state.files.map((item) => item.file.name),
-    mode: state.mode,
+    count: files.length,
+    names: files.map((item) => item.file.name),
+    mode,
+    result,
+    error,
   });
-  state.files = [];
-  state.notice = null;
+  if (!error) state.files = [];
+  state.busy = false;
   renderNotice();
   renderFiles();
   renderOutputs();
@@ -307,25 +351,23 @@ function submitFiles() {
 
 function renderOutputs() {
   const latest = state.submissions[state.submissions.length - 1];
+  summary.replaceChildren();
+  detail.replaceChildren();
   if (!latest) {
-    summary.replaceChildren(placeholder("summaryEmpty"));
-    detail.replaceChildren(placeholder("fieldsEmpty"));
-  } else {
-    summary.innerHTML = "";
+    summary.append(placeholder("summaryEmpty"));
+    detail.append(placeholder("fieldsEmpty"));
+  } else if (latest.error || !latest.result) {
     const text = document.createElement("p");
     text.className = "summary-text";
-    text.textContent = queuedSentence(latest);
+    text.textContent = t("failed");
     summary.append(text);
-
-    detail.innerHTML = "";
-    const list = document.createElement("ul");
-    list.className = "detail-list";
-    latest.names.forEach((name) => {
-      const item = document.createElement("li");
-      item.textContent = name;
-      list.append(item);
-    });
-    detail.append(list);
+    detail.append(placeholder("fieldsEmpty"));
+  } else {
+    const text = document.createElement("p");
+    text.className = "summary-text";
+    text.textContent = summarySentence(latest);
+    summary.append(text);
+    latest.result.files.forEach((file) => detail.append(renderFileFields(file)));
   }
 
   resultsBody.replaceChildren();
@@ -345,15 +387,96 @@ function renderOutputs() {
     const countCell = document.createElement("td");
     countCell.textContent = String(submission.count);
     const companyCell = document.createElement("td");
-    companyCell.textContent = "—";
+    companyCell.textContent = companyName(submission) || "—";
     const statusCell = document.createElement("td");
     const pill = document.createElement("span");
     pill.className = "pill";
-    pill.textContent = t("pending");
+    pill.textContent = statusLabel(submission);
     statusCell.append(pill);
     row.append(countCell, companyCell, statusCell);
     resultsBody.append(row);
   });
+}
+
+function renderFileFields(file) {
+  const block = document.createElement("section");
+  block.className = "file-block";
+  const title = document.createElement("h3");
+  title.textContent = `${file.filename} · ${file.type || t("unrecognised")}`;
+  block.append(title);
+  if (!file.json || Object.keys(file.json).length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "placeholder";
+    empty.textContent = t("noFields");
+    block.append(empty);
+    return block;
+  }
+  block.append(renderObject(file.json, file.sources || {}));
+  return block;
+}
+
+function renderObject(value, sources) {
+  const list = document.createElement("dl");
+  list.className = "field-list";
+  Object.entries(value).forEach(([key, item]) => {
+    const term = document.createElement("dt");
+    term.textContent = key;
+    const definition = document.createElement("dd");
+    if (item && typeof item === "object") {
+      definition.append(renderObject(item, sources));
+    } else {
+      definition.textContent = item === null || item === undefined ? "null" : String(item);
+      if (sources[key]) {
+        const tag = document.createElement("span");
+        tag.className = "source";
+        tag.textContent = sources[key] === "llm" ? t("sourceLlm") : t("sourceRule");
+        definition.append(tag);
+      }
+    }
+    list.append(term, definition);
+  });
+  return list;
+}
+
+function nullFields(value, prefix) {
+  if (!value || typeof value !== "object") return [];
+  const found = [];
+  Object.entries(value).forEach(([key, item]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (item && typeof item === "object") found.push(...nullFields(item, path));
+    else if (item === null) found.push(path);
+  });
+  return found;
+}
+
+function companyName(submission) {
+  if (!submission.result) return "";
+  for (const file of submission.result.files) {
+    const name = findName(file.json);
+    if (name) return name;
+  }
+  return "";
+}
+
+function findName(value) {
+  if (!value || typeof value !== "object") return "";
+  if (typeof value.nazwa === "string" && value.nazwa) return value.nazwa;
+  for (const item of Object.values(value)) {
+    if (item && typeof item === "object") {
+      const name = findName(item);
+      if (name) return name;
+    }
+  }
+  return "";
+}
+
+function statusLabel(submission) {
+  if (submission.error || !submission.result) return t("statusFailed");
+  const files = submission.result.files;
+  const recognised = files.filter((file) => file.type).length;
+  if (recognised === 0) return t("statusNone");
+  if (recognised < files.length) return t("statusPartial");
+  return t("statusDone");
 }
 
 function placeholder(key) {

@@ -65,11 +65,16 @@ class PrzelewExtraction:
     sources: dict[str, str]
 
 
-def extract_przelew(text: str, client: LLMClient | None = None) -> PrzelewExtraction:
+def extract_przelew(
+    text: str,
+    client: LLMClient | None = None,
+    *,
+    use_llm: bool = True,
+) -> PrzelewExtraction:
     values = _from_rules(text or "")
     sources = {field: "rule" for field, value in values.items() if value is not None}
     missing = [field for field in FIELDS if values.get(field) is None]
-    if missing:
+    if missing and use_llm:
         llm_client = client if client is not None else LLMClient()
         filled = _from_llm(llm_client, text or "", missing)
         for field in missing:
@@ -80,7 +85,11 @@ def extract_przelew(text: str, client: LLMClient | None = None) -> PrzelewExtrac
             else:
                 sources[field] = "llm"
     payload = {"przelew_bankowy": {field: values.get(field) for field in FIELDS}}
-    return PrzelewExtraction(data=payload, sources={field: sources.get(field, "llm") for field in FIELDS})
+    fallback = "llm" if use_llm else "rule"
+    return PrzelewExtraction(
+        data=payload,
+        sources={field: sources.get(field, fallback) for field in FIELDS},
+    )
 
 
 def _from_rules(text: str) -> dict:

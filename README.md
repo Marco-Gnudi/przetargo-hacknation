@@ -23,4 +23,5 @@ gh pr create --fill
 ```
 
 ## Running locally
-_To be filled in once the stack is chosen._
+
+`start_ui.bat` starts the Python API (http://127.0.0.1:8000) and the PrzetarGO page (http://127.0.0.1:8080). The CLI in `backend/start.bat` is unchanged. See `backend/README.md` for setup.

@@ -1,6 +1,6 @@
 # Odwołania2JSON backend
 
-Classify KIO appeal PDFs and write JSON. Classification is still a stub, so every file currently becomes `{}`. The CLI, PDF reader, config and Bielik client are wired.
+Classify KIO appeal PDFs and write JSON. The CLI, PDF reader, rules, and Bielik client are wired. The HTTP API serves the PrzetarGO front-end.
 
 Training data lives at the repo root in `UZP-hacknation-task/` (the brief calls this folder `data/`). Paths inside the package are resolved from the repo root, not the shell's current directory.
 
@@ -41,6 +41,12 @@ Reads `przyklad_01/potwierdzenie_przelewu.pdf`, asks for the przelew fields, and
 ```
 
 The classifier is scored on `dane/`, including `negatywne/` and the decoy PDFs. The przelew eval compares all 60 cases with the expected `przelew.json` and reports whether each field came from a rule or the LLM.
+
+## UI
+
+From the repo root, `start_ui.bat` starts the API on http://127.0.0.1:8000 and the front-end on http://127.0.0.1:8080.
+
+`POST /api/process` takes PDF files and `mode` (`regular` or `bielik`). `regular` uses rules only. `bielik` keeps the rules and asks the model only when classification or a przelew field is still empty. `GET /api/health` returns `{"status": "ok"}`.
 
 ## Tests
 

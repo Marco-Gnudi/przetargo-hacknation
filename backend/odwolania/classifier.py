@@ -21,6 +21,25 @@ def classify(text: str) -> str | None:
     return classify_text(text).label
 
 
+def classify_with_llm(text: str, client: object | None = None) -> str | None:
+    """Ask the LLM to pick a configured type. Used only when rules return None."""
+    from odwolania.llm import LLMClient
+
+    settings = load_settings()
+    allowed = [doc.id for doc in settings.document_types]
+    prompt = (
+        "Sklasyfikuj dokument wyłącznie na podstawie treści. "
+        f"Dozwolone wartości type: {', '.join(allowed)}, albo null. "
+        'Zwróć JSON {"type": "<id albo null>"}.'
+    )
+    llm = client if client is not None else LLMClient()
+    raw = llm.extract_json(prompt, text or "")
+    label = raw.get("type") if isinstance(raw, dict) else None
+    if isinstance(label, str) and label in allowed:
+        return label
+    return None
+
+
 def classify_text(text: str) -> Classification:
     settings = load_settings()
     if not text or not text.strip():

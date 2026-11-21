@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
-from odwolania.classifier import classify
+from odwolania.classifier import classify, classify_with_llm
 from odwolania.extractors.przelew import extract_przelew
 from odwolania.pdf_reader import read_pdf
 
@@ -22,6 +23,36 @@ def process_document(pdf_path: Path) -> dict:
     if document_type is None:
         return {}
     return extract(document_type, text)
+
+
+@dataclass(frozen=True)
+class ProcessedFile:
+    filename: str
+    document_type: str | None
+    data: dict
+    sources: dict[str, str]
+
+
+def process_file(pdf_path: Path, *, mode: str = "regular", filename: str | None = None) -> ProcessedFile:
+    """Classify and extract one PDF. `regular` never calls the LLM."""
+    if mode not in ("regular", "bielik"):
+        raise ValueError("mode must be regular or bielik")
+    text = read_pdf(pdf_path)
+    use_llm = mode == "bielik"
+    document_type = classify(text)
+    if document_type is None and use_llm:
+        document_type = classify_with_llm(text)
+    if document_type is None:
+        return ProcessedFile(filename or pdf_path.name, None, {}, {})
+    data, sources = _extract(document_type, text, use_llm=use_llm)
+    return ProcessedFile(filename or pdf_path.name, document_type, data, sources)
+
+
+def _extract(document_type: str, text: str, *, use_llm: bool) -> tuple[dict, dict[str, str]]:
+    if document_type == "przelew":
+        extracted = extract_przelew(text, use_llm=use_llm)
+        return extracted.data, extracted.sources
+    return {}, {}
 
 
 def run(input_dir: Path, output_dir: Path) -> list[Path]:

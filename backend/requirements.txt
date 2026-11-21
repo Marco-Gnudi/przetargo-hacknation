@@ -4,3 +4,7 @@ openai
 python-dotenv
 PyYAML
 pytest
+httpx
+fastapi
+uvicorn
+python-multipart
