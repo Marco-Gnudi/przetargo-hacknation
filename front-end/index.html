@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Odwołania2json</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="sheet">
+      <p class="badge">Local prototype</p>
+
+      <header class="top">
+        <h1>Odwołania2json</h1>
+        <div class="modes" role="group" aria-label="Processing mode">
+          <button type="button" class="btn btn-orange is-selected" data-mode="regular" aria-pressed="true">
+            Regular Processing (No LLM)
+          </button>
+          <button type="button" class="btn btn-orange" data-mode="bielik" aria-pressed="false">
+            Bielik Powered Processing
+          </button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <div class="column">
+          <h2>Input</h2>
+          <div
+            id="dropzone"
+            class="panel panel-input"
+            tabindex="0"
+            role="button"
+            aria-label="Add PDF files. Drop files here or press Enter to browse."
+          >
+            <ul class="hints">
+              <li>Drag and drop PDF</li>
+              <li>Attach PDF from your local files</li>
+              <li>One and more</li>
+            </ul>
+            <ul id="file-list" class="file-list" hidden></ul>
+            <p id="input-message" class="message" role="status"></p>
+          </div>
+          <input id="file-input" class="visually-hidden" type="file" accept="application/pdf,.pdf" multiple />
+          <button type="button" id="submit" class="btn btn-orange submit" disabled>Submit button</button>
+        </div>
+
+        <div class="column column-output">
+          <h2>Output summary</h2>
+          <div id="summary" class="panel">
+            <p class="placeholder">Is the submission complete, is any information missing?</p>
+          </div>
+
+          <h2>Detailed Output</h2>
+          <div id="detail" class="panel panel-detail">
+            <p class="placeholder">Exact sections and fields</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="results">
+        <h2 class="results-title">All processed outputs in a table form</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Nr. PDFs</th>
+                <th scope="col">Submission Company Name</th>
+                <th scope="col">Is it complete / missing information</th>
+              </tr>
+            </thead>
+            <tbody id="results-body">
+              <tr class="empty-row">
+                <td colspan="3">No submissions yet. Add one or more PDFs, then submit.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="reset-row">
+            <button type="button" id="reset" class="btn btn-orange">Reset Button</button>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
