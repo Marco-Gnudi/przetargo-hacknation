@@ -9,7 +9,19 @@ const detail = document.querySelector("#detail");
 const resultsBody = document.querySelector("#results-body");
 const modeButtons = document.querySelectorAll("[data-mode]");
 const langButtons = document.querySelectorAll("[data-lang]");
+const bielikSettings = document.querySelector("#bielik-settings");
+const bielikKey = document.querySelector("#bielik-key");
+const bielikRemember = document.querySelector("#bielik-remember");
+const bielikBaseUrl = document.querySelector("#bielik-base-url");
+const bielikModel = document.querySelector("#bielik-model");
+const bielikStatus = document.querySelector("#bielik-status");
+const bielikCheck = document.querySelector("#bielik-check");
+const samplePicker = document.querySelector("#sample-picker");
+const sampleSelect = document.querySelector("#sample-select");
+const sampleLoad = document.querySelector("#sample-load");
+const inputFolder = document.querySelector("#input-folder");
 const MAX_PDFS = 30;
+const LLM_STORAGE_KEY = "przetargo-bielik";
 
 const copy = {
   pl: {
@@ -85,6 +97,24 @@ const copy = {
     pending: "Jeszcze nieprzetworzone",
     footer: "Hacknation 2026 projekt dla Urzędu Zamówień Publicznych",
     modeName: { regular: "przetwarzanie regularne", bielik: "Bielik", bielik_only: "Tylko Bielik" },
+    apiErrorHosted: "Ekstraktor nie odpowiada. Odśwież stronę i spróbuj ponownie.",
+    bielikKeyTitle: "Klucz API do Bielika",
+    bielikKeyHint: "Klucz zostaje w tej przeglądarce i jest wysyłany tylko z Twoimi żądaniami. Serwer go nie zapisuje.",
+    bielikCheck: "Sprawdź klucz",
+    bielikRemember: "Zapamiętaj na tym urządzeniu",
+    bielikAdvanced: "Ustawienia zaawansowane",
+    bielikBaseUrl: "Adres API (zgodny z OpenAI)",
+    bielikModel: "Model",
+    bielikChecking: "Sprawdzanie klucza…",
+    bielikOk: "Klucz działa.",
+    bielikServerKey: "Ten serwer ma własny klucz. Możesz podać swój albo zostawić pole puste.",
+    bielikKeyMissing: "Wpisz klucz API do Bielika albo wybierz tryb Regularne.",
+    bielikKeyRejected: "Bielik odrzucił klucz API albo model. Sprawdź klucz i spróbuj ponownie.",
+    sampleTitle: "Wypróbuj przykładową sprawę",
+    sampleLoad: "Dodaj pliki",
+    sampleText: "Sprawa {id} · PDF z tekstem",
+    sampleScan: "Skany {id} · OCR",
+    sampleError: "Nie udało się pobrać przykładowych plików.",
   },
   en: {
     title: "PrzetarGO",
@@ -159,6 +189,24 @@ const copy = {
     pending: "Not processed yet",
     footer: "HackNation 2026 project for the Public Procurement Office",
     modeName: { regular: "regular processing", bielik: "Bielik", bielik_only: "Bielik only" },
+    apiErrorHosted: "The extractor did not respond. Refresh the page and try again.",
+    bielikKeyTitle: "Bielik API key",
+    bielikKeyHint: "The key stays in this browser and is sent only with your own requests. The server does not store it.",
+    bielikCheck: "Check key",
+    bielikRemember: "Remember on this device",
+    bielikAdvanced: "Advanced settings",
+    bielikBaseUrl: "API base URL (OpenAI-compatible)",
+    bielikModel: "Model",
+    bielikChecking: "Checking the key…",
+    bielikOk: "The key works.",
+    bielikServerKey: "This server has its own key. You can enter yours or leave the field empty.",
+    bielikKeyMissing: "Enter a Bielik API key, or choose Regular mode.",
+    bielikKeyRejected: "Bielik rejected the API key or the model. Check the key and try again.",
+    sampleTitle: "Try an example case",
+    sampleLoad: "Add files",
+    sampleText: "Case {id} · text PDFs",
+    sampleScan: "Scans {id} · OCR",
+    sampleError: "The example files could not be downloaded.",
   },
 };
 
@@ -171,9 +219,25 @@ const state = {
   notice: null,
   busy: false,
   selectedCases: new Set(),
+  hosted: false,
+  serverKey: false,
+  samples: [],
+  keyStatus: null,
 };
 
 let inputCatalog = [];
+
+loadLlmSettings();
+[bielikKey, bielikBaseUrl, bielikModel].forEach((field) => {
+  field.addEventListener("input", () => {
+    state.keyStatus = null;
+    saveLlmSettings();
+    renderKeyStatus();
+  });
+});
+bielikRemember.addEventListener("change", saveLlmSettings);
+bielikCheck.addEventListener("click", checkKey);
+sampleLoad.addEventListener("click", loadSample);
 
 langButtons.forEach((button) => {
   button.addEventListener("click", () => setLang(button.dataset.lang));
@@ -284,6 +348,8 @@ function applyCopy() {
   renderNotice();
   renderFiles();
   renderInputCases();
+  renderSamples();
+  renderKeyStatus();
   renderOutputs();
 }
 
@@ -294,6 +360,10 @@ function renderNotice() {
   }
   if (state.notice.text) {
     inputMessage.textContent = state.notice.text;
+    return;
+  }
+  if (state.notice.key === "apiError") {
+    inputMessage.textContent = apiErrorText();
     return;
   }
   const names = state.notice.names ? state.notice.names.join(", ") : "";
@@ -307,12 +377,158 @@ function selectMode(mode) {
     button.classList.toggle("is-selected", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
+  bielikSettings.hidden = !needsBielik(mode);
+}
+
+function needsBielik(mode) {
+  return mode === "bielik" || mode === "bielik_only";
 }
 
 function apiBase() {
-  const here = location.hostname === "127.0.0.1" || location.hostname === "localhost";
-  if (here && location.port === "8000") return "";
-  return "http://127.0.0.1:8000";
+  const local = location.hostname === "127.0.0.1" || location.hostname === "localhost";
+  // start_ui.bat serves the page on :8080 and the API on :8000; a deployed site serves both.
+  if (location.protocol === "file:" || (local && location.port === "8080")) return "http://127.0.0.1:8000";
+  return "";
+}
+
+function loadLlmSettings() {
+  let saved = null;
+  try {
+    saved = sessionStorage.getItem(LLM_STORAGE_KEY) || localStorage.getItem(LLM_STORAGE_KEY);
+    bielikRemember.checked = Boolean(localStorage.getItem(LLM_STORAGE_KEY));
+  } catch {
+    saved = null;
+  }
+  if (!saved) return;
+  try {
+    const parsed = JSON.parse(saved);
+    bielikKey.value = parsed.key || "";
+    bielikBaseUrl.value = parsed.baseUrl || "";
+    bielikModel.value = parsed.model || "";
+  } catch {
+    // A damaged entry is ignored; the visitor types the key again.
+  }
+}
+
+function saveLlmSettings() {
+  const value = JSON.stringify({
+    key: bielikKey.value.trim(),
+    baseUrl: bielikBaseUrl.value.trim(),
+    model: bielikModel.value.trim(),
+  });
+  try {
+    sessionStorage.setItem(LLM_STORAGE_KEY, value);
+    if (bielikRemember.checked) localStorage.setItem(LLM_STORAGE_KEY, value);
+    else localStorage.removeItem(LLM_STORAGE_KEY);
+  } catch {
+    // The key still works for this page view when storage is blocked.
+  }
+}
+
+function llmHeaders() {
+  const headers = {};
+  if (bielikKey.value.trim()) headers["X-LLM-Key"] = bielikKey.value.trim();
+  if (bielikBaseUrl.value.trim()) headers["X-LLM-Base-Url"] = bielikBaseUrl.value.trim();
+  if (bielikModel.value.trim()) headers["X-LLM-Model"] = bielikModel.value.trim();
+  return headers;
+}
+
+function renderKeyStatus() {
+  bielikStatus.className = "key-status";
+  if (state.keyStatus === "checking") {
+    bielikStatus.textContent = t("bielikChecking");
+  } else if (state.keyStatus === "ok") {
+    bielikStatus.classList.add("is-ok");
+    bielikStatus.textContent = t("bielikOk");
+  } else if (state.keyStatus && state.keyStatus.error) {
+    bielikStatus.classList.add("is-bad");
+    bielikStatus.textContent = state.keyStatus.error;
+  } else if (state.serverKey && !bielikKey.value.trim()) {
+    bielikStatus.textContent = t("bielikServerKey");
+  } else {
+    bielikStatus.textContent = "";
+  }
+}
+
+async function checkKey() {
+  state.keyStatus = "checking";
+  renderKeyStatus();
+  try {
+    const response = await fetch(`${apiBase()}/api/llm/check`, { method: "POST", headers: llmHeaders() });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.detail || String(response.status));
+    state.keyStatus = body.ok ? "ok" : { error: body.error || t("bielikKeyMissing") };
+  } catch (error) {
+    state.keyStatus = { error: error.message || apiErrorText() };
+  }
+  renderKeyStatus();
+}
+
+function apiErrorText() {
+  return state.hosted ? t("apiErrorHosted") : t("apiError");
+}
+
+async function loadServerInfo() {
+  try {
+    const response = await fetch(`${apiBase()}/api/health`);
+    if (!response.ok) throw new Error(String(response.status));
+    const body = await response.json();
+    state.hosted = Boolean(body.hosted);
+    state.serverKey = Boolean(body.server_key);
+  } catch {
+    state.hosted = false;
+  }
+  inputFolder.hidden = state.hosted;
+  renderKeyStatus();
+  if (!state.hosted) loadInputCases();
+}
+
+async function loadSamples() {
+  try {
+    const response = await fetch(`${apiBase()}/api/samples`);
+    if (!response.ok) throw new Error(String(response.status));
+    const body = await response.json();
+    state.samples = body.samples || [];
+  } catch {
+    state.samples = [];
+  }
+  renderSamples();
+}
+
+function renderSamples() {
+  samplePicker.hidden = state.samples.length === 0;
+  const chosen = sampleSelect.value;
+  sampleSelect.replaceChildren();
+  state.samples.forEach((sample) => {
+    const option = document.createElement("option");
+    option.value = sample.id;
+    const id = sample.id.replace(/^(przyklad|skany)_/, "");
+    option.textContent = t(sample.kind === "scan" ? "sampleScan" : "sampleText").replace("{id}", id);
+    sampleSelect.append(option);
+  });
+  if (chosen) sampleSelect.value = chosen;
+}
+
+async function loadSample() {
+  const sample = state.samples.find((item) => item.id === sampleSelect.value);
+  if (!sample || state.busy) return;
+  sampleLoad.disabled = true;
+  try {
+    const files = await Promise.all(
+      sample.files.map(async (entry) => {
+        const response = await fetch(`${apiBase()}/api/samples/file?path=${encodeURIComponent(entry.path)}`);
+        if (!response.ok) throw new Error(String(response.status));
+        const blob = await response.blob();
+        return new File([blob], entry.name, { type: "application/pdf", lastModified: 0 });
+      })
+    );
+    await addFiles(files);
+  } catch {
+    state.notice = { key: "sampleError" };
+    renderNotice();
+  } finally {
+    sampleLoad.disabled = false;
+  }
 }
 
 async function addFiles(fileListLike) {
@@ -475,6 +691,12 @@ async function submitFiles() {
   const cases = [...state.selectedCases];
   if ((selected.length === 0 && cases.length === 0) || state.busy) return;
   const mode = state.mode;
+  if (needsBielik(mode) && !bielikKey.value.trim() && !state.serverKey) {
+    state.notice = { key: "bielikKeyMissing" };
+    renderNotice();
+    bielikKey.focus();
+    return;
+  }
   state.busy = true;
   state.notice = null;
   renderFiles();
@@ -487,10 +709,10 @@ async function submitFiles() {
     if (cases.length > 0) {
       const response = await fetch(`${apiBase()}/api/extract/input`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...llmHeaders() },
         body: JSON.stringify({ cases, mode }),
       });
-      if (!response.ok) throw new Error(String(response.status));
+      await ensureOk(response);
       const body = await response.json();
       results.push(...(body.results || []));
       elapsed += Number(body.elapsed_seconds) || 0;
@@ -501,8 +723,12 @@ async function submitFiles() {
       const form = new FormData();
       form.append("mode", mode);
       selected.forEach((item) => form.append("files", item.file, item.file.name));
-      const response = await fetch(`${apiBase()}/api/extract/batch`, { method: "POST", body: form });
-      if (!response.ok) throw new Error(String(response.status));
+      const response = await fetch(`${apiBase()}/api/extract/batch`, {
+        method: "POST",
+        headers: llmHeaders(),
+        body: form,
+      });
+      await ensureOk(response);
       const body = await response.json();
       results.push(...(body.results || []));
       elapsed += Number(body.elapsed_seconds) || 0;
@@ -518,15 +744,30 @@ async function submitFiles() {
       elapsed,
       perFile: results.length ? elapsed / results.length : 0,
     });
-  } catch {
-    state.notice = { key: "apiError" };
+  } catch (error) {
+    state.notice = error && error.notice ? error.notice : { key: "apiError" };
   } finally {
     state.busy = false;
     renderNotice();
     renderFiles();
     renderOutputs();
-    loadInputCases();
+    if (!state.hosted) loadInputCases();
   }
+}
+
+async function ensureOk(response) {
+  if (response.ok) return;
+  let detail = "";
+  try {
+    detail = (await response.json()).detail;
+  } catch {
+    detail = "";
+  }
+  const error = new Error(String(response.status));
+  if (detail === "bielik_key_missing") error.notice = { key: "bielikKeyMissing" };
+  else if (detail === "bielik_key_rejected") error.notice = { key: "bielikKeyRejected" };
+  else if (typeof detail === "string" && detail) error.notice = { text: detail };
+  throw error;
 }
 
 function renderOutputs() {
@@ -857,7 +1098,9 @@ function resetAll() {
 }
 
 applyCopy();
-loadInputCases();
+selectMode(state.mode);
+loadServerInfo();
+loadSamples();
 
 async function fileByteSize(file) {
   if (file.size > 0) return file.size;

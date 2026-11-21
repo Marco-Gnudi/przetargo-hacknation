@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrzetarGO</title>
-    <link rel="stylesheet" href="styles.css?v=18" />
+    <link rel="stylesheet" href="styles.css?v=19" />
   </head>
   <body>
     <header class="site-header">
@@ -64,12 +64,54 @@
         </div>
       </section>
 
+      <section id="bielik-settings" class="bielik-settings card" aria-labelledby="bielik-key-label" hidden>
+        <div class="bielik-settings-head">
+          <h2 id="bielik-key-label" data-i18n="bielikKeyTitle">Klucz API do Bielika</h2>
+          <p data-i18n="bielikKeyHint">Klucz zostaje w tej przeglądarce i jest wysyłany tylko z Twoimi żądaniami. Serwer go nie zapisuje.</p>
+        </div>
+        <div class="key-row">
+          <input
+            id="bielik-key"
+            class="text-input"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="hf_…"
+            data-i18n-aria="bielikKeyTitle"
+          />
+          <button type="button" id="bielik-check" class="btn btn-ghost" data-i18n="bielikCheck">Sprawdź klucz</button>
+        </div>
+        <label class="remember">
+          <input id="bielik-remember" type="checkbox" />
+          <span data-i18n="bielikRemember">Zapamiętaj na tym urządzeniu</span>
+        </label>
+        <details class="bielik-advanced">
+          <summary data-i18n="bielikAdvanced">Ustawienia zaawansowane</summary>
+          <label class="field">
+            <span data-i18n="bielikBaseUrl">Adres API (zgodny z OpenAI)</span>
+            <input id="bielik-base-url" class="text-input" type="url" spellcheck="false" placeholder="https://router.huggingface.co/v1" />
+          </label>
+          <label class="field">
+            <span data-i18n="bielikModel">Model</span>
+            <input id="bielik-model" class="text-input" type="text" spellcheck="false" placeholder="speakleash/Bielik-11B-v3.0-Instruct" />
+          </label>
+        </details>
+        <p id="bielik-status" class="key-status" role="status"></p>
+      </section>
+
       <section class="workspace">
         <article class="card">
           <header class="card-head">
             <h2 data-i18n="documents">Dokumenty</h2>
           </header>
-          <section class="input-folder" aria-labelledby="input-folder-label">
+          <section id="sample-picker" class="sample-picker" aria-labelledby="sample-label" hidden>
+            <h3 id="sample-label" data-i18n="sampleTitle">Wypróbuj przykładową sprawę</h3>
+            <div class="key-row">
+              <select id="sample-select" class="text-input" data-i18n-aria="sampleTitle"></select>
+              <button type="button" id="sample-load" class="btn btn-ghost" data-i18n="sampleLoad">Dodaj pliki</button>
+            </div>
+          </section>
+          <section id="input-folder" class="input-folder" aria-labelledby="input-folder-label" hidden>
             <div class="input-folder-head">
               <h3 id="input-folder-label" data-i18n="inputFolder">Folder input</h3>
               <div class="input-actions">
@@ -153,6 +195,6 @@
     <footer class="site-footer">
       <p data-i18n="footer">Hacknation 2026 projekt dla Urzędu Zamówień Publicznych</p>
     </footer>
-    <script src="app.js?v=18"></script>
+    <script src="app.js?v=19"></script>
   </body>
 </html>
