@@ -12,7 +12,7 @@ const langButtons = document.querySelectorAll("[data-lang]");
 
 const copy = {
   pl: {
-    title: "Odwołania2json",
+    title: "PrzetarGO",
     tagline: "Odwołania KIO w danych",
     language: "Język",
     heroTitle: "Odczytaj odwołanie z dokumentów",
@@ -47,7 +47,7 @@ const copy = {
     modeName: { regular: "przetwarzanie regularne", bielik: "Bielik" },
   },
   en: {
-    title: "Odwołania2json",
+    title: "PrzetarGO",
     tagline: "KIO appeals as structured data",
     language: "Language",
     heroTitle: "Read an appeal from its documents",

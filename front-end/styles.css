@@ -95,26 +95,21 @@ a {
   text-decoration: none;
 }
 
-.brand strong {
+.logo {
   display: block;
-  font-size: 16px;
-  letter-spacing: -0.02em;
+  height: 42px;
+  width: auto;
+  padding: 5px 10px;
+  background: #fff;
+  border-radius: 10px;
 }
 
 .brand small {
   display: block;
-  color: #c5d0de;
+  max-width: 12rem;
+  color: #d6def2;
   font-size: 13px;
-}
-
-.mark {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--red);
-  color: white;
+  line-height: 1.25;
 }
 
 .page {
@@ -472,6 +467,14 @@ th {
 
   .intro h1 {
     font-size: 26px;
+  }
+
+  .brand small {
+    display: none;
+  }
+
+  .logo {
+    height: 36px;
   }
 
   .mode-bar,
