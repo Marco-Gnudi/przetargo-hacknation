@@ -470,6 +470,10 @@ th {
 }
 
 .result h3 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 0 0 8px;
   font-size: 16px;
 }
@@ -508,10 +512,19 @@ th {
 }
 
 .field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.3;
   overflow-wrap: anywhere;
+}
+
+.uncertain-mark {
+  display: inline-flex;
+  flex: none;
+  line-height: 0;
 }
 
 .field-value {

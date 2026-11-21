@@ -3,7 +3,6 @@ const fileInput = document.querySelector("#file-input");
 const fileList = document.querySelector("#file-list");
 const inputMessage = document.querySelector("#input-message");
 const submitButton = document.querySelector("#submit");
-const loadExampleButton = document.querySelector("#load-example");
 const resetButton = document.querySelector("#reset");
 const summary = document.querySelector("#summary");
 const detail = document.querySelector("#detail");
@@ -44,7 +43,7 @@ const copy = {
     apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom back-end2/start.sh.",
     emptyFiles: "Ten plik ma 0 bajtów w oknie wyboru, więc nie ma w nim treści PDF. Pobierz pliki pod polem albo wybierz PDF, przy którym widać rozmiar.",
     dropNote: "Możesz upuścić dowolny PDF z dysku. Plik w oknie wyboru musi mieć rozmiar większy niż zero.",
-    loadExample: "Wczytaj przykład 01",
+    uncertain: "Niepewne",
     filesTotal: "{count} plików · {size}",
     bielikNote: "Model Bielik nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
     unrecognized: "Dokument nie został rozpoznany. Ekstraktor nie przypisał go do odwołania, pełnomocnictwa ani potwierdzenia przelewu.",
@@ -100,7 +99,7 @@ const copy = {
     apiError: "The extractor did not respond. Refresh this page. If it still fails, run back-end2/start.sh.",
     emptyFiles: "That file is 0 bytes in the file window, so it has no PDF content. Download the files under the box, or choose a PDF that shows a size.",
     dropNote: "You can drop any PDF from your disk. In the file window it must show a size above zero.",
-    loadExample: "Load example 01",
+    uncertain: "Uncertain",
     filesTotal: "{count} files · {size}",
     bielikNote: "Bielik is not connected. This run used the deterministic extractor.",
     unrecognized: "The document was not recognized. It was not classified as an appeal, a power of attorney, or a transfer confirmation.",
@@ -186,7 +185,6 @@ fileInput.addEventListener("change", () => {
 });
 
 submitButton.addEventListener("click", submitFiles);
-loadExampleButton.addEventListener("click", loadExample);
 resetButton.addEventListener("click", resetAll);
 
 function savedLang() {
@@ -337,31 +335,6 @@ function renderFiles() {
   }
   submitButton.disabled = state.busy || state.files.length === 0;
   submitButton.textContent = state.busy ? t("processingNow") : t("process");
-  loadExampleButton.disabled = state.busy;
-}
-
-async function loadExample() {
-  if (state.busy) return;
-  state.busy = true;
-  state.notice = null;
-  renderFiles();
-  try {
-    const response = await fetch(`${apiBase()}/api/extract/example`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ case: "przyklad_01" }),
-    });
-    if (!response.ok) throw new Error(String(response.status));
-    const body = await response.json();
-    state.submissions.push({ mode: state.mode, results: body.results || [] });
-  } catch {
-    state.notice = { key: "apiError" };
-  } finally {
-    state.busy = false;
-    renderNotice();
-    renderFiles();
-    renderOutputs();
-  }
 }
 
 async function submitFiles() {
@@ -463,6 +436,7 @@ function renderResult(item) {
   const heading = document.createElement("h3");
   const sizeLabel = Number.isFinite(item.size) ? ` · ${formatSize(item.size)}` : "";
   heading.textContent = `${item.filename}${sizeLabel} — ${typeLabel(item.document_type)}`;
+  if (item.status === "unrecognized" || item.status === "error") heading.append(uncertainMark());
   article.append(heading);
 
   if (item.status === "unrecognized") {
@@ -524,6 +498,16 @@ function renderResult(item) {
   return article;
 }
 
+function uncertainMark() {
+  const mark = document.createElement("span");
+  mark.className = "uncertain-mark";
+  mark.title = t("uncertain");
+  mark.setAttribute("role", "img");
+  mark.setAttribute("aria-label", t("uncertain"));
+  mark.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="8" fill="#d52f2b"/><text x="8" y="12" text-anchor="middle" font-size="11" font-family="Segoe UI, sans-serif" font-weight="700" fill="#fff">?</text></svg>';
+  return mark;
+}
+
 function renderFields(value) {
   const list = document.createElement("div");
   list.className = "field-list";
@@ -538,6 +522,7 @@ function renderFields(value) {
     if (fieldValue === null) {
       content.classList.add("is-null");
       content.textContent = t("nullValue");
+      label.append(uncertainMark());
     } else {
       content.textContent = String(fieldValue);
     }
