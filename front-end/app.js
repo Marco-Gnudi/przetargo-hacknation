@@ -58,7 +58,7 @@ const copy = {
     sourceRule: "Reguły",
     sourceLlm: "Bielik",
     sourceAgree: "Reguły ✓ Bielik",
-    timing: "{seconds} s · {average} s na plik",
+    timing: "Czas procesowania: {total} · {average} na plik",
     unrecognized: "Dokument nie został rozpoznany. Ekstraktor nie przypisał go do odwołania, pełnomocnictwa ani potwierdzenia przelewu.",
     copyJson: "Kopiuj JSON",
     copied: "Skopiowano",
@@ -126,7 +126,7 @@ const copy = {
     sourceRule: "Rules",
     sourceLlm: "Bielik",
     sourceAgree: "Rules ✓ Bielik",
-    timing: "{seconds} s · {average} s per file",
+    timing: "Processing time: {total} · {average} per file",
     unrecognized: "The document was not recognized. It was not classified as an appeal, a power of attorney, or a transfer confirmation.",
     copyJson: "Copy JSON",
     copied: "Copied",
@@ -425,10 +425,10 @@ function renderOutputs() {
     summary.append(list);
     if (Number.isFinite(Number(latest.elapsed))) {
       const timing = document.createElement("p");
-      timing.className = "summary-text";
+      timing.className = "summary-text summary-timing";
       timing.textContent = t("timing")
-        .replace("{seconds}", Number(latest.elapsed).toFixed(1))
-        .replace("{average}", Number(latest.perFile).toFixed(1));
+        .replace("{total}", formatDuration(latest.elapsed))
+        .replace("{average}", formatDuration(latest.perFile));
       summary.append(timing);
     }
     latest.results
@@ -725,6 +725,17 @@ async function fileByteSize(file) {
   } catch {
     return 0;
   }
+}
+
+function formatDuration(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) return "—";
+  if (value < 1) {
+    const milliseconds = Math.round(value * 1000);
+    return `${value > 0 ? Math.max(1, milliseconds) : 0} ms`;
+  }
+  if (value < 10) return `${value.toFixed(2)} s`;
+  return `${value.toFixed(1)} s`;
 }
 
 function formatSize(bytes) {

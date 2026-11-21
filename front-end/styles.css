@@ -391,6 +391,12 @@ a {
   margin: 0;
 }
 
+.summary-timing {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .summary-doc + .summary-doc {
   margin-top: 12px;
 }
