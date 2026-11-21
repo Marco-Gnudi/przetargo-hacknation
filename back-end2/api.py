@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from pipeline import load_rules, process_pdf
 
@@ -20,12 +21,20 @@ FRONTEND = Path(__file__).resolve().parents[1] / "front-end"
 RULES = load_rules()
 
 app = FastAPI(title="PrzetarGO")
+class PrivateNetworkMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+        return response
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https?://(127\.0\.0\.1|localhost)(:\d+)?",
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+app.add_middleware(PrivateNetworkMiddleware)
 
 
 @app.get("/api/health")
@@ -99,4 +108,4 @@ app.mount("/", StaticFiles(directory=FRONTEND, html=True), name="frontend")
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("PORT", "8000")))

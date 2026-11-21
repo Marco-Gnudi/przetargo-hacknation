@@ -40,7 +40,8 @@ const copy = {
     colStatus: "Status",
     noCases: "Brak spraw.",
     processingNow: "Przetwarzanie…",
-    apiError: "Ekstraktor nie działa. W drugim terminalu uruchom back-end2/start.sh i kliknij Przetwórz dokumenty ponownie.",
+    apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom back-end2/start.sh.",
+    emptyFiles: "Przeglądarka nie przekazała zawartości: {names}. Kliknij pole i wybierz pliki PDF z dysku. Przeciąganie z edytora często daje puste pliki.",
     filesTotal: "{count} plików · {size}",
     bielikNote: "Model Bielik nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
     unrecognized: "Dokument nie został rozpoznany. Ekstraktor nie przypisał go do odwołania, pełnomocnictwa ani potwierdzenia przelewu.",
@@ -93,7 +94,8 @@ const copy = {
     colStatus: "Status",
     noCases: "No cases yet.",
     processingNow: "Processing…",
-    apiError: "The extractor is not running. In another terminal run back-end2/start.sh, then press Process documents again.",
+    apiError: "The extractor did not respond. Refresh this page. If it still fails, run back-end2/start.sh.",
+    emptyFiles: "The browser did not include the contents of {names}. Click the box and choose the PDFs from your disk. Dragging them from the editor often sends empty files.",
     filesTotal: "{count} files · {size}",
     bielikNote: "Bielik is not connected. This run used the deterministic extractor.",
     unrecognized: "The document was not recognized. It was not classified as an appeal, a power of attorney, or a transfer confirmation.",
@@ -239,10 +241,8 @@ function selectMode(mode) {
 }
 
 function apiBase() {
-  if (location.protocol === "http:" && (location.hostname === "127.0.0.1" || location.hostname === "localhost") && location.port === "8000") {
-    return "";
-  }
-  return "http://127.0.0.1:8000";
+  if (location.protocol === "http:" || location.protocol === "https:") return "";
+  return "http://127.0.0.1:8765";
 }
 
 async function addFiles(fileListLike) {
@@ -250,6 +250,7 @@ async function addFiles(fileListLike) {
   if (incoming.length === 0) return;
 
   const rejected = [];
+  const empty = [];
   let added = 0;
 
   for (const file of incoming) {
@@ -258,6 +259,10 @@ async function addFiles(fileListLike) {
       continue;
     }
     const size = await fileByteSize(file);
+    if (size === 0) {
+      empty.push(file.name);
+      continue;
+    }
     const duplicate = state.files.some(
       (item) =>
         item.file.name === file.name &&
@@ -269,7 +274,9 @@ async function addFiles(fileListLike) {
     added += 1;
   }
 
-  if (rejected.length > 0) {
+  if (empty.length > 0) {
+    state.notice = { key: "emptyFiles", names: empty };
+  } else if (rejected.length > 0) {
     state.notice = { key: "pdfOnly", names: rejected };
   } else if (added === 0) {
     state.notice = { key: "already" };
