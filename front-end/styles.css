@@ -238,6 +238,97 @@ a {
   background: var(--accent-soft);
 }
 
+.bielik-settings {
+  margin: 0 0 20px;
+  padding: 16px 18px;
+}
+
+.bielik-settings-head h2,
+.sample-picker h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.sample-picker h3 {
+  font-size: 14px;
+}
+
+.bielik-settings-head p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.key-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.key-row .text-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.text-input {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.text-input:focus-visible {
+  outline: 3px solid #f2b8b6;
+  outline-offset: 1px;
+}
+
+.bielik-advanced {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.bielik-advanced summary {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.bielik-advanced .field {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.key-status {
+  margin: 10px 0 0;
+  font-size: 14px;
+}
+
+.key-status:empty {
+  display: none;
+}
+
+.key-status.is-ok {
+  color: #1d6b3a;
+}
+
+.key-status.is-bad {
+  color: var(--danger);
+}
+
+.sample-picker {
+  margin: 16px 18px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
@@ -384,7 +475,8 @@ a {
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
-  overflow: hidden;
+  max-height: 420px;
+  overflow-y: auto;
 }
 
 .file-list li {
@@ -636,6 +728,7 @@ th {
 }
 
 .pill-unrecognized,
+.pill-needs_ocr,
 .pill-error {
   background: #fde8e6;
   color: var(--red);

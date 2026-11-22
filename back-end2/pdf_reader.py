@@ -60,6 +60,17 @@ def read_pdf(path):
     return document
 
 
+def forget_pdf(path) -> None:
+    """Drop cached reads of a temporary upload so a shared server does not keep its text."""
+    resolved = str(Path(path).resolve())
+    for key in [key for key in _CACHE if key[0] == resolved]:
+        del _CACHE[key]
+
+
+def _disk_cache_enabled() -> bool:
+    return os.environ.get("PRZETARGO_HOSTED", "").strip().lower() not in ("1", "true", "yes", "on")
+
+
 def _read(path: Path) -> PdfDocument:
     pdf = pymupdf.open(path)
     pages = []
@@ -143,6 +154,8 @@ def _ocr_cache_file(path: Path, variant: str = "") -> Path:
 
 
 def _load_ocr_cache(path: Path, variant: str = "") -> dict | None:
+    if not _disk_cache_enabled():
+        return None
     file = _ocr_cache_file(path, variant)
     if not file.is_file():
         return None
@@ -215,6 +228,8 @@ def _measure_confidence(path: Path) -> float | None:
 
 
 def _save_ocr_cache(path: Path, text: str, seconds: float, variant: str = "", pages: dict | None = None) -> None:
+    if not _disk_cache_enabled():
+        return
     file = _ocr_cache_file(path, variant)
     file.parent.mkdir(parents=True, exist_ok=True)
     payload = {"text": text, "seconds": seconds}
@@ -358,20 +373,41 @@ def _line_score(image) -> int:
     return score
 
 
-def _configure_tesseract() -> bool:
+OCR_MISSING_HINT = (
+    "Scanned PDF: there is no text layer and OCR is not available. "
+    "Install Tesseract with Polish data (see README, 'Tesseract') or set TESSERACT_CMD, then run python doctor.py."
+)
+_COMMON_TESSERACT = (
+    Path("/opt/homebrew/bin/tesseract"),
+    Path("/usr/local/bin/tesseract"),
+    Path("/usr/bin/tesseract"),
+    Path.home() / "AppData" / "Local" / "Programs" / "Tesseract-OCR" / "tesseract.exe",
+    Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
+    Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),
+)
+
+
+def find_tesseract() -> str:
+    """TESSERACT_CMD, then PATH, then the usual install folders. Empty when none exists."""
     load_dotenv(_ENV_PATH)
+    command = os.environ.get("TESSERACT_CMD") or ""
+    if command and Path(command).is_file():
+        return command
+    found = shutil.which("tesseract")
+    candidates = ([Path(found)] if found else []) + list(_COMMON_TESSERACT)
+    return next((str(path) for path in candidates if path.is_file()), "")
+
+
+def ocr_available() -> bool:
+    return _configure_tesseract()
+
+
+def _configure_tesseract() -> bool:
     try:
         import pytesseract
     except ImportError:
         return False
-    command = os.environ.get("TESSERACT_CMD") or ""
-    if not (command and Path(command).is_file()):
-        found = shutil.which("tesseract")
-        candidates = [Path(found)] if found else []
-        local = Path.home() / "AppData" / "Local" / "Programs" / "Tesseract-OCR" / "tesseract.exe"
-        program = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
-        candidates.extend((local, program))
-        command = next((str(path) for path in candidates if path.is_file()), "")
+    command = find_tesseract()
     if not command:
         return False
     pytesseract.pytesseract.tesseract_cmd = command

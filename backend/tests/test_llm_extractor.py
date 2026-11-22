@@ -173,6 +173,15 @@ def test_skip_cache_calls_the_model_again(tmp_path):
         set_skip_cache(False)
 
 
+def test_hosted_mode_neither_reads_nor_writes_the_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("PRZETARGO_HOSTED", "1")
+    client = _Fake({"mocodawca": [], "pelnomocnicy": [{"imie_nazwisko": "Jan Nowak"}]})
+    extract("pelnomocnictwo", "to samo", client, cache_dir=tmp_path)
+    extract("pelnomocnictwo", "to samo", client, cache_dir=tmp_path)
+    assert client.calls == 2
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_attorneys_nested_in_the_principal_are_lifted(tmp_path):
     client = _Fake(
         {

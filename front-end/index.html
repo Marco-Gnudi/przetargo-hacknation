@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrzetarGO</title>
-    <link rel="stylesheet" href="styles.css?v=22" />
+    <link rel="stylesheet" href="styles.css?v=23" />
   </head>
   <body>
     <header class="site-header">
@@ -71,12 +71,51 @@
         </div>
       </section>
 
+      <section id="bielik-settings" class="bielik-settings card" aria-labelledby="bielik-key-label" hidden>
+        <div class="bielik-settings-head">
+          <h2 id="bielik-key-label" data-i18n="bielikKeyTitle">Klucz API Mistral</h2>
+          <p data-i18n="bielikKeyHint">Klucz jest tylko w pamięci tej karty i trafia wyłącznie do lokalnego serwera PrzetarGO. Nie jest nigdzie zapisywany.</p>
+        </div>
+        <div class="key-row">
+          <input
+            id="bielik-key"
+            class="text-input"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="MISTRAL_API_KEY"
+            data-i18n-aria="bielikKeyTitle"
+          />
+          <button type="button" id="bielik-check" class="btn btn-ghost" data-i18n="bielikCheck">Sprawdź połączenie</button>
+        </div>
+        <details class="bielik-advanced">
+          <summary data-i18n="bielikAdvanced">Ustawienia zaawansowane</summary>
+          <label class="field">
+            <span data-i18n="bielikBaseUrl">Adres API (zgodny z OpenAI)</span>
+            <input id="bielik-base-url" class="text-input" type="url" spellcheck="false" placeholder="https://api.scaleway.ai/v1" />
+          </label>
+          <label class="field">
+            <span data-i18n="bielikModel">Model</span>
+            <input id="bielik-model" class="text-input" type="text" spellcheck="false" placeholder="mistral-small-3.2-24b-instruct-2506" />
+          </label>
+        </details>
+        <p id="bielik-status" class="key-status" role="status"></p>
+      </section>
+
       <section class="workspace">
         <article class="card">
           <header class="card-head">
             <h2 data-i18n="documents">Dokumenty</h2>
           </header>
-          <section class="input-folder" aria-labelledby="input-folder-label">
+          <p id="ocr-warning" class="key-status is-bad" data-i18n="ocrMissing" hidden></p>
+          <section id="sample-picker" class="sample-picker" aria-labelledby="sample-label" hidden>
+            <h3 id="sample-label" data-i18n="sampleTitle">Wypróbuj przykładową sprawę</h3>
+            <div class="key-row">
+              <select id="sample-select" class="text-input" data-i18n-aria="sampleTitle"></select>
+              <button type="button" id="sample-load" class="btn btn-ghost" data-i18n="sampleLoad">Dodaj pliki</button>
+            </div>
+          </section>
+          <section id="input-folder" class="input-folder" aria-labelledby="input-folder-label" hidden>
             <div class="input-folder-head">
               <h3 id="input-folder-label" data-i18n="inputFolder">Folder input</h3>
               <div class="input-actions">
@@ -100,7 +139,7 @@
               </svg>
             </span>
             <p class="drop-title" data-i18n="dropTitle">Upuść pliki PDF tutaj albo dodaj je ze swojego urządzenia.</p>
-            <p class="drop-hint" data-i18n="dropHint">Do 30 plików PDF.</p>
+            <p class="drop-hint" data-i18n="dropHint">Do 150 plików PDF.</p>
           </div>
           <input id="file-input" class="visually-hidden" type="file" accept="application/pdf,.pdf" multiple />
           <p id="input-message" class="message" role="status"></p>
@@ -180,6 +219,6 @@
     <footer class="site-footer">
       <p data-i18n="footer">Hacknation 2026 projekt dla Urzędu Zamówień Publicznych</p>
     </footer>
-    <script src="app.js?v=22"></script>
+    <script src="app.js?v=23"></script>
   </body>
 </html>

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from classifier import classify
 from extractors import EXTRACTORS
-from pdf_reader import read_pdf
+from pdf_reader import OCR_MISSING_HINT, ocr_available, read_pdf
 from validators import validate
 
 RULES_PATH = Path(__file__).resolve().parent / "configs" / "rules.json"
@@ -23,7 +23,7 @@ def process_pdf(path, rules=None):
     document_type = decision["document_type"]
     warnings = []
     if document.needs_ocr:
-        warnings.append("No usable text layer and OCR did not run.")
+        warnings.append(OCR_MISSING_HINT if not ocr_available() else "Scanned PDF: OCR found no readable text.")
     if document.ocr_used:
         warnings.append(f"Text came from OCR ({document.ocr_seconds:.1f} s).")
     try:
@@ -45,5 +45,6 @@ def process_pdf(path, rules=None):
         "warnings": warnings,
         "text_source": document.text_source,
         "ocr_seconds": document.ocr_seconds,
+        "needs_ocr": document.needs_ocr,
     }
     return payload, diagnostic

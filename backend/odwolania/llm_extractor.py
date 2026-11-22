@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from odwolania.config import load_settings
-from odwolania.llm import LLMClient, MAX_TEXT_CHARS, cache_skipped, load_env
+from odwolania.llm import LLMClient, MAX_TEXT_CHARS, cache_skipped, hosted, llm_setting
 
 CACHE_DIR = Path(__file__).resolve().parents[1] / ".cache" / "llm"
 
@@ -160,8 +159,7 @@ def _prompt(doc_type: str) -> str:
 
 def _env_model() -> str:
     """Model name for the cache key, so replies from different models never mix."""
-    load_env()
-    return os.environ.get("LLM_MODEL", "")
+    return llm_setting("LLM_MODEL")
 
 
 def _cached_json(prompt: str, text: str, client: LLMClient | None, cache_dir: Path) -> dict:
@@ -169,12 +167,14 @@ def _cached_json(prompt: str, text: str, client: LLMClient | None, cache_dir: Pa
     model_name = getattr(client, "model", "") if client is not None else _env_model()
     digest = hashlib.sha256(f"{model_name}\0{prompt}\0{clipped}".encode("utf-8")).hexdigest()
     path = cache_dir / f"{digest}.json"
-    if path.is_file() and not cache_skipped():
+    # A shared server must not hand one visitor's document data to another.
+    shared = hosted()
+    if path.is_file() and not cache_skipped() and not shared:
         cached = json.loads(path.read_text(encoding="utf-8"))
         return cached if isinstance(cached, dict) else {}
     llm = client if client is not None else LLMClient()
     raw = llm.extract_json(prompt, clipped)
-    if raw:
+    if raw and not shared:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     return raw

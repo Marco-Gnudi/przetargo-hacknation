@@ -26,7 +26,10 @@ local.properties
 *.aab
 # Cached Bielik responses (prompt + text hash)
 backend/.cache/
-# Generated results and evaluation reports
-output/*
-!output/.gitkeep
+# Documents and results stay on the machine that processes them
+/input/*
+!/input/.gitkeep
+/output/*
+!/output/.gitkeep
+# Evaluation reports
 reports/
