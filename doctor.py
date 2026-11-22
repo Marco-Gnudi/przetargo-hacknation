@@ -122,9 +122,15 @@ def _tesseract(report: Report, packages_ok: bool) -> None:
     else:
         command = os.environ.get("TESSERACT_CMD") or shutil.which("tesseract") or ""
     if not command:
-        report.line("FAIL", "Tesseract executable", "not found (scanned PDFs cannot be read)", _tesseract_hint())
-        for name in ("Tesseract version", "Polish OCR data (pol)", "English OCR data (eng)", "OCR test"):
+        report.line(
+            "WARN",
+            "Tesseract executable",
+            "not found. Text PDFs work. Scanned PDFs need Tesseract.",
+            _tesseract_hint(),
+        )
+        for name in ("Tesseract version", "Polish OCR data (pol)", "OCR test"):
             report.line("SKIP", name)
+        report.line("SKIP", "English OCR data (eng)", "not required; OCR uses Polish only")
         return
     report.line("PASS", "Tesseract executable", command)
 
@@ -132,9 +138,11 @@ def _tesseract(report: Report, packages_ok: bool) -> None:
     first = (version or "").splitlines()[0] if version else ""
     number = first.replace("tesseract", "").strip().lstrip("v")
     if not first:
-        report.line("FAIL", "Tesseract version", "could not run tesseract --version", _tesseract_hint())
+        report.line("WARN", "Tesseract version", "could not run tesseract --version", _tesseract_hint())
     elif number[:1].isdigit() and int(number.split(".")[0]) < 4:
-        report.line("FAIL", "Tesseract version", f"{number} (4.x or 5.x needed)", _tesseract_hint())
+        report.line("WARN", "Tesseract version", f"{number} (4.x or 5.x needed)", _tesseract_hint())
+    elif number[:1].isdigit() and int(number.split(".")[0]) < 5:
+        report.line("PASS", "Tesseract version", f"{number} (5.x recommended)")
     else:
         report.line("PASS", "Tesseract version", number)
 
@@ -143,11 +151,16 @@ def _tesseract(report: Report, packages_ok: bool) -> None:
     if "pol" in languages:
         report.line("PASS", "Polish OCR data (pol)", "installed")
     else:
-        report.line("FAIL", "Polish OCR data (pol)", "missing (scanned Polish PDFs will read badly or not at all)", _language_hint("pol"))
+        report.line(
+            "WARN",
+            "Polish OCR data (pol)",
+            "missing. Text PDFs work. Scanned Polish PDFs need it.",
+            _language_hint("pol"),
+        )
     if "eng" in languages:
-        report.line("PASS", "English OCR data (eng)", "installed")
+        report.line("PASS", "English OCR data (eng)", "installed, optional (OCR uses Polish only)")
     else:
-        report.line("FAIL", "English OCR data (eng)", "missing", _language_hint("eng"))
+        report.line("SKIP", "English OCR data (eng)", "not required; OCR uses Polish only")
 
     if not packages_ok or "pol" not in languages:
         report.line("SKIP", "OCR test", "needs the Python packages and Polish data")
@@ -189,7 +202,7 @@ def _tesseract_hint() -> str:
             "Default path: C:\\Program Files\\Tesseract-OCR\\tesseract.exe. If it is elsewhere, set\n"
             "TESSERACT_CMD=C:\\path\\to\\tesseract.exe in backend\\.env or add its folder to PATH."
         )
-    return "Install: sudo apt install tesseract-ocr tesseract-ocr-pol tesseract-ocr-eng"
+    return "Install: sudo apt-get install tesseract-ocr tesseract-ocr-pol"
 
 
 def _language_hint(language: str) -> str:

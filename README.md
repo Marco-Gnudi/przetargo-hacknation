@@ -8,65 +8,47 @@ Team project for HackNation 2026 in Bydgoszcz (21-22 Nov 2026).
 
 Odwołania2JSON, for the Public Procurement Office (UZP): read the PDFs in a KIO appeal case and write one JSON file per document in the official schema.
 
-## How we work
-- `main` must always be demo-ready.
-- Work on a short-lived branch: `feat/<thing>`, `fix/<thing>`.
-- Commit small and often with clear messages.
-- Merge into `main` via a small pull request; pull `main` often.
+## Quick Start
 
-```bash
-git checkout main && git pull
-git checkout -b feat/my-feature
-# ...work...
-git add -A && git commit -m "Add my feature"
-git push -u origin feat/my-feature
-gh pr create --fill
-```
-
-## For UZP Judges — Quick Start
-
-PrzetarGO reads KIO appeal case PDFs (odwołanie, pełnomocnictwo, potwierdzenie przelewu) and writes one JSON file per PDF in the official schema. Everything runs on your own computer. Documents leave the machine only when you add a Mistral key: the page then sends the extracted text to the Mistral API.
-
-### 1. Install the two system tools, then run the setup script
-
-Install these yourself. The script does not install them.
-
-**Python 3.13 or newer.**
-
-- macOS: `brew install python@3.13`
-- Ubuntu/Debian: `sudo apt install python3.13 python3.13-venv`
-- Windows: https://www.python.org/downloads/ (tick "Add python.exe to PATH"), or `winget install -e --id Python.Python.3.13`
-
-**Tesseract OCR 5, with Polish and English language data.** Text PDFs work without it. Scanned PDFs do not. Details are under [Tesseract](#tesseract-for-scanned-pdfs).
-
-- macOS: `brew install tesseract tesseract-lang`
-- Ubuntu/Debian: `sudo apt install tesseract-ocr tesseract-ocr-pol tesseract-ocr-eng`
-- Windows: the installer from https://github.com/UB-Mannheim/tesseract/wiki, with Polish and English selected. If `tesseract` is not on PATH, set `TESSERACT_CMD` in `backend/.env` to the full path of `tesseract.exe`.
-
-Get the project:
-
-```bash
-git clone https://github.com/Marco-Gnudi/przetargo-hacknation.git
-cd przetargo-hacknation
-```
-
-Or download the ZIP from GitHub (**Code → Download ZIP**) and unpack it.
-
-From that folder, run the setup script. The first run takes about a minute: it creates `.venv` and installs the Python packages from `requirements.txt`.
+PrzetarGO reads KIO appeal PDFs and writes one JSON file per PDF. It runs on your computer. A downloaded ZIP works the same way as a git clone; Git is not required.
 
 macOS / Linux:
 
 ```bash
-./start.sh doctor
+git clone https://github.com/Marco-Gnudi/przetargo-hacknation.git
+cd przetargo-hacknation
+./start.sh
 ```
 
 Windows, in Command Prompt:
 
 ```bat
-start.bat doctor
+git clone https://github.com/Marco-Gnudi/przetargo-hacknation.git
+cd przetargo-hacknation
+start.bat
 ```
 
-Those packages are:
+The script creates `.venv`, installs the Python packages, and prints **http://127.0.0.1:8000/**. It opens that address when the page is ready. Leave the terminal open; Ctrl+C stops the server. Another port: `PORT=8010 ./start.sh` (Windows: `set PORT=8010` then `start.bat`).
+
+You need **Python 3.13 or newer** before the first run. If it is missing, the script prints the install command for your system and stops. It does not install Python for you.
+
+**Tesseract OCR 5 with Polish data** is needed only for scans. If it is missing, the script offers to install it (Homebrew, apt, or winget) and asks before doing so. apt and winget may ask for an administrator password, because Tesseract is a system program. Saying no is fine: text PDFs still run, and scans are reported instead of guessed. English OCR data is not used.
+
+Put each case in its own folder under `input/`, then press **Przetwórz dokumenty**. Results land in `output/` under the same names:
+
+```
+input/case1/odwolanie.pdf   ->   output/case1/odwolanie.json
+```
+
+The page processes every PDF under `input/`. A file that is not an appeal, a power of attorney, or a transfer confirmation is written as `{}`. Classification uses the document text, not the file name. No API key is required for that. For Mistral, paste the key into **Klucz API Mistral** and press **Dodaj**. The key stays in that browser tab only.
+
+Check the machine without starting the server: `./start.sh doctor` (Windows: `start.bat doctor`).
+
+## Setup in detail
+
+### Python packages the script installs
+
+Only when `.venv` is missing or `requirements.txt` has changed:
 
 | Package | What it is for |
 | --- | --- |
@@ -76,57 +58,34 @@ Those packages are:
 | openai | The Mistral API client |
 | fastapi, uvicorn, python-multipart | The website |
 
-The script then prints PASS or FAIL for Python, those packages, Tesseract, the Polish and English OCR data, and the `input/` and `output/` folders. Every required line should say PASS. The Mistral key line may say SKIP: the key is entered in the browser in step 3, not in a file. You need about 1 GB of free disk. 16 GB of RAM is plenty, and no GPU is required.
+### Python 3.13
 
-### 2. Place the cases in the input folder
+- macOS: `brew install python@3.13`
+- Ubuntu/Debian: `sudo apt-get install python3.13 python3.13-venv` (add `ppa:deadsnakes/ppa` first if 3.13 is not in the release)
+- Windows: `winget install -e --id Python.Python.3.13` or https://www.python.org/downloads/ (tick "Add python.exe to PATH")
+- An existing install: `PYTHON=/path/to/python3.13 ./start.sh` (Windows: `set PYTHON=C:\Path\to\python.exe`)
 
-Put each case in its own folder inside `input/`, in the project root. A PDF's result is a JSON file with the same name.
+### Tesseract for scanned PDFs
 
-```
-input/
-├── case1/
-│   ├── odwolanie_nr_1.pdf
-│   ├── pelnomocnictwo_nr_1.pdf
-│   └── przelew_nr_1.pdf
-└── case2/
-    └── odwolanie_nr_2.pdf
-```
+OCR calls Tesseract with the Polish (`pol`) language data only. English (`eng`) is optional and is not used. A custom `TESSERACT_CMD` in the environment or in `backend/.env` is used as-is.
 
-A folder name can be any mix of letters, digits, dots, underscores and hyphens, such as `case1`. The page processes every PDF it finds under `input/`.
+- **macOS:** `brew install tesseract tesseract-lang`
+- **Ubuntu/Debian:** `sudo apt-get install tesseract-ocr tesseract-ocr-pol`
+- **Windows:** Tesseract 5 from https://github.com/UB-Mannheim/tesseract/wiki (tick Polish), or `winget install -e --id UB-Mannheim.TesseractOCR`. If Polish was not included, copy `pol.traineddata` from https://github.com/tesseract-ocr/tessdata_fast into the `tessdata` folder next to `tesseract.exe`. If the program is not on PATH, set `TESSERACT_CMD` in `backend/.env`.
 
-### 3. Start the website
+Without Tesseract, text PDFs still work. A scan is reported as needing OCR and written as `{}`.
 
-macOS / Linux:
+`./start.sh doctor` prints PASS, WARN or SKIP for Python, packages, Tesseract, Polish data, a real OCR test, the folders, the port, and the Mistral endpoint. English data is reported as optional. A missing Mistral key is SKIP: deterministic processing still runs, and the key can be pasted in the page. The key is never printed. About 1 GB of disk is enough. No GPU is required.
 
-```bash
-./start.sh
-```
-
-Windows:
-
-```bat
-start.bat
-```
-
-When the checks pass, open **http://127.0.0.1:8000/**. The server listens only on this computer. Leave the terminal window open; Ctrl+C stops it. For another port: `PORT=8010 ./start.sh` (Windows: `set PORT=8010` and then `start.bat`).
-
-Stay on **Zadanie Hacknation** (Hacknation Task):
-
-1. Paste the Mistral API key into **Klucz API Mistral** and press **Dodaj** (or Enter). The page checks the key. On success the box clears and shows "Klucz dodany" with the model name. The key stays in that browser tab only: it is not saved in the browser, on disk, or in logs, and it is sent only to the local server.
-2. The folder line shows how many cases and PDFs were found, for example "Dodano 2 spraw · 4 plików PDF". If you copied the files in while the page was open, press **Odśwież**.
-3. Press **Przetwórz dokumenty**. The summary lists each document as it finishes, then the time, the Mistral token count, how many documents were recognised, and how many were out of scope.
-
-The JSON files are in the project folder:
+### Input and output
 
 ```
-output/
-├── case1/
-│   ├── odwolanie_nr_1.json
-│   ├── pelnomocnictwo_nr_1.json
-│   └── przelew_nr_1.json
-└── case2/
-    └── odwolanie_nr_2.json
+input/case1/odwolanie_nr_1.pdf          ->  output/case1/odwolanie_nr_1.json
+input/case1/pelnomocnictwo_nr_1.pdf     ->  output/case1/pelnomocnictwo_nr_1.json
+input/case2/przelew_nr_1.pdf            ->  output/case2/przelew_nr_1.json
 ```
+
+A folder name can be letters, digits, dots, underscores and hyphens. The summary lists each document as it finishes, then the time, the Mistral token count when a key was used, how many documents were recognised, and how many were out of scope.
 
 ### Run the full batch (no interaction)
 
@@ -179,14 +138,6 @@ export MISTRAL_API_KEY=...            # Windows cmd: set MISTRAL_API_KEY=...   P
 
 Use the alternative with `MISTRAL_BASE_URL=https://api.eu.mistral.ai/v1 MISTRAL_MODEL=mistral-small-2603`. We could not test it without a key. The model is a general-purpose LLM (text, and page images for weak scans); PrzetarGO does not use the proprietary Mistral OCR API.
 
-### Tesseract for scanned PDFs
-
-- **macOS:** `brew install tesseract tesseract-lang`
-- **Ubuntu/Debian:** `sudo apt install tesseract-ocr tesseract-ocr-pol tesseract-ocr-eng`
-- **Windows:** install Tesseract 5.x from https://github.com/UB-Mannheim/tesseract/wiki and tick Polish under *Additional language data*. Add `C:\Program Files\Tesseract-OCR` to PATH, or set `TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe`. If Polish is missing, copy `pol.traineddata` from https://github.com/tesseract-ocr/tessdata_fast into `C:\Program Files\Tesseract-OCR\tessdata`.
-
-PrzetarGO finds Tesseract on PATH, in the usual install folders, or via `TESSERACT_CMD`. Without it, text PDFs still work and scans are reported as **needs OCR** and written as `{}`; they are never guessed.
-
 ### Check your setup
 
 ```bash
@@ -194,7 +145,7 @@ PrzetarGO finds Tesseract on PATH, in the usual install folders, or via `TESSERA
 .venv/bin/python doctor.py --check-llm   # also tests the Mistral key (one tiny request)
 ```
 
-It prints PASS / FAIL / SKIP for Python, packages, Tesseract, `pol`/`eng` data, a real OCR test, folder permissions, the port, and the Mistral endpoint, model and key (the key is never printed).
+It prints PASS, WARN or SKIP. WARN means text PDFs still run. The Mistral key is never printed.
 
 ### Docker (optional, includes Tesseract)
 
@@ -212,12 +163,19 @@ On Linux add `--user "$(id -u):$(id -g)"` so the output files belong to you.
 | --- | --- |
 | "PrzetarGO needs Python 3.13 or newer" | Install 3.13 (macOS `brew install python@3.13`, Ubuntu `sudo apt install python3.13 python3.13-venv`, Windows `winget install -e --id Python.Python.3.13`), or point to it with `PYTHON=/path/to/python3.13 ./start.sh`. If `.venv` was made with an older Python, delete `.venv` and start again. |
 | Tesseract not found | Install it (above) or set `TESSERACT_CMD`. Run `./start.sh doctor`. |
-| Polish data (`pol`) missing | Ubuntu: `sudo apt install tesseract-ocr-pol`; macOS: `brew install tesseract-lang`; Windows: copy `pol.traineddata` into `tessdata`. |
+| Polish data (`pol`) missing | Ubuntu: `sudo apt-get install tesseract-ocr-pol`; macOS: `brew install tesseract-lang`; Windows: copy `pol.traineddata` into `tessdata`. English data is not required. |
 | Mistral key rejected (HTTP 401/403) | Check the key, and that the model name exists at that endpoint. `doctor.py --check-llm` shows the HTTP status. |
 | EU endpoint unreachable or model missing | Go back to the default: unset `MISTRAL_BASE_URL` and `MISTRAL_MODEL` (Scaleway, Paris). Or run deterministic mode. |
 | Port 8000 in use | `PORT=8010 ./start.sh` (Windows: `set PORT=8010`). |
 | Missing Python packages | Delete `.venv` and run the start script again, or `.venv/bin/python -m pip install -r requirements.txt`. |
 | A scan shows "needs OCR" | Tesseract is missing or could not read the page; run `./start.sh doctor`. |
+
+### How we work
+
+- `main` must always be demo-ready.
+- Work on a short-lived branch: `feat/<thing>`, `fix/<thing>`.
+- Commit small and often with clear messages.
+- Merge into `main` via a small pull request; pull `main` often.
 
 ### Developers
 

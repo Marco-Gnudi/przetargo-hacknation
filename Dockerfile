@@ -5,7 +5,7 @@
 FROM python:3.13-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-pol tesseract-ocr-eng \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-pol \
     && rm -rf /var/lib/apt/lists/*
 
 # HOST is 0.0.0.0 only inside the container; publish it as 127.0.0.1:8000 so it stays local.
