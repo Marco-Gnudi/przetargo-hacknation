@@ -131,11 +131,52 @@ a {
   font-size: 14px;
 }
 
+.intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+}
+
 .intro h1 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 32px;
   line-height: 1.2;
   letter-spacing: -0.03em;
+}
+
+.source-switch {
+  display: inline-flex;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
+}
+
+.source-switch[hidden] {
+  display: none;
+}
+
+.source-switch button {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.source-switch button.is-selected {
+  background: var(--accent);
+  color: white;
+}
+
+.source-switch button:hover:not(.is-selected) {
+  background: var(--accent-soft);
 }
 
 .intro p,
@@ -381,13 +422,125 @@ a {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 650;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.case-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.case-tree details {
+  margin: 4px 0 0 26px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.case-tree summary {
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.case-tree details ul {
+  max-height: 220px;
+  overflow-y: auto;
 }
 
 .case-tree ul li {
-  margin: 2px 0 0 26px;
+  margin: 2px 0 0;
   color: var(--ink);
   font-size: 14px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.progress-head {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  overflow: hidden;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.progress-list {
+  max-height: 340px;
+  margin: 12px 0 0;
+  padding: 0 0 0 28px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+
+.progress-item {
+  padding: 3px 0;
+}
+
+.progress-item > span {
+  display: inline;
+}
+
+.progress-name {
+  overflow-wrap: anywhere;
+}
+
+.progress-state {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.progress-state.is-ok {
+  color: #1d6b3a;
+}
+
+.progress-state.is-bad,
+.run-report .is-bad {
+  color: var(--red);
+}
+
+.progress-item.is-running .progress-state {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.run-report {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.run-report p {
+  margin: 0 0 6px;
+}
+
+.run-report .report-strong {
+  font-weight: 600;
+}
+
+.run-report .is-ok {
+  color: #1d6b3a;
+}
+
+.output-paths {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
 }
 
 .dropzone {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrzetarGO</title>
-    <link rel="stylesheet" href="styles.css?v=19" />
+    <link rel="stylesheet" href="styles.css?v=20" />
   </head>
   <body>
     <header class="site-header">
@@ -41,6 +41,10 @@
     <main class="page">
       <section class="intro">
         <h1 data-i18n="heroTitle">Konwertuj pliki PDF na JSON-y</h1>
+        <div class="source-switch" role="group" data-i18n-aria="viewLabel">
+          <button type="button" class="is-selected" data-view="task" aria-pressed="true" data-i18n="viewTask">Zadanie Hacknation</button>
+          <button type="button" data-view="drop" aria-pressed="false" data-i18n="viewDrop">Przeciągnij i upuść</button>
+        </div>
       </section>
 
       <section class="mode-bar" aria-labelledby="mode-label">
@@ -112,6 +116,7 @@
             <div class="input-folder-head">
               <h3 id="input-folder-label" data-i18n="inputFolder">Folder input</h3>
               <div class="input-actions">
+                <button type="button" id="refresh-input" class="btn btn-ghost" data-i18n="refreshInput">Odśwież</button>
                 <button type="button" id="select-all" class="btn btn-ghost" data-i18n="selectAll">Zaznacz wszystkie</button>
                 <button type="button" id="delete-input" class="btn btn-ghost" data-i18n="deleteInput">Usuń input</button>
               </div>
@@ -144,54 +149,20 @@
 
         <div class="results-stack">
           <article class="card">
-            <header class="card-head">
+            <header class="card-head table-head">
               <h2 data-i18n="summary">Podsumowanie</h2>
+              <button type="button" id="reset" class="btn btn-ghost" data-i18n="clear">Wyczyść sesję</button>
             </header>
-            <div id="summary" class="panel-body">
-              <p class="placeholder" data-i18n="summaryEmpty">Kompletność i brakujące informacje pojawią się po przetworzeniu sprawy.</p>
+            <div id="summary" class="panel-body" aria-live="polite">
+              <p class="placeholder" data-i18n="summaryEmpty">Postęp przetwarzania i podsumowanie pojawią się tutaj.</p>
             </div>
           </article>
-
-          <article class="card">
-            <header class="card-head">
-              <h2 data-i18n="fields">Wyodrębnione pola</h2>
-            </header>
-            <div id="detail" class="panel-body">
-              <p class="placeholder" data-i18n="fieldsEmpty">Sekcje i wartości pól każdego dokumentu pojawią się tutaj.</p>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section class="card table-card">
-        <header class="card-head table-head">
-          <div>
-            <h2 data-i18n="cases">Sprawy</h2>
-            <p data-i18n="casesHint">Każdy zestaw dokumentów przesłany w tej sesji.</p>
-          </div>
-          <button type="button" id="reset" class="btn btn-ghost" data-i18n="clear">Wyczyść sesję</button>
-        </header>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col" data-i18n="colFile">Plik</th>
-                <th scope="col" data-i18n="colType">Rodzaj</th>
-                <th scope="col" data-i18n="colStatus">Status</th>
-              </tr>
-            </thead>
-            <tbody id="results-body">
-              <tr class="empty-row">
-                <td colspan="3" data-i18n="noCases">Brak spraw.</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </section>
     </main>
     <footer class="site-footer">
       <p data-i18n="footer">Hacknation 2026 projekt dla Urzędu Zamówień Publicznych</p>
     </footer>
-    <script src="app.js?v=19"></script>
+    <script src="app.js?v=20"></script>
   </body>
 </html>

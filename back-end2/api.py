@@ -43,6 +43,8 @@ INPUT_ROOT = REPO_ROOT / "input"
 OUTPUT_ROOT = REPO_ROOT / "output"
 CASE_NAME = re.compile(r"^przyklad_\d{2}$")
 CASE_DIR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+# PDFs placed straight in input/ rather than in a case folder; their JSON goes straight to output/.
+ROOT_CASE = "."
 SCAN_GROUPS = ("odwolania", "pelnomocnictwa", "potwierdzenia")
 
 def _show_llm_calls() -> None:
@@ -257,12 +259,54 @@ def list_input():
     INPUT_ROOT.mkdir(parents=True, exist_ok=True)
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     cases = []
+    loose = _pdfs(INPUT_ROOT)
+    if loose:
+        cases.append({"name": ROOT_CASE, "files": [{"name": pdf.name, "size": pdf.stat().st_size} for pdf in loose]})
     for folder in sorted(path for path in INPUT_ROOT.iterdir() if path.is_dir() and CASE_DIR.fullmatch(path.name)):
-        files = []
-        for pdf in sorted(folder.glob("*.pdf")):
-            files.append({"name": pdf.name, "size": pdf.stat().st_size})
+        files = [{"name": pdf.name, "size": pdf.stat().st_size} for pdf in _pdfs(folder)]
         cases.append({"name": folder.name, "files": files})
-    return {"cases": cases}
+    return {"cases": cases, "input_root": str(INPUT_ROOT), "output_root": str(OUTPUT_ROOT)}
+
+
+def _pdfs(folder: Path) -> list[Path]:
+    return sorted(path for path in folder.iterdir() if path.is_file() and path.suffix.lower() == ".pdf")
+
+
+class InputFileRequest(BaseModel):
+    case: str
+    file: str
+    mode: str = "regular"
+
+
+@app.post("/api/extract/input/file")
+def extract_input_file(body: InputFileRequest, request: Request):
+    """One PDF from input/ per request, so the page can show progress for any number of files."""
+    _require_local()
+    if body.mode not in MODES:
+        raise HTTPException(status_code=400, detail="mode must be regular, bielik, or bielik_only")
+    folder = _case_dir(body.case)
+    if folder is None or Path(body.file).name != body.file:
+        raise HTTPException(status_code=404, detail="Unknown file.")
+    pdf = folder / body.file
+    if not pdf.is_file() or pdf.suffix.lower() != ".pdf":
+        raise HTTPException(status_code=404, detail="Unknown file.")
+    from odwolania.llm import current_usage, set_skip_cache, start_usage
+
+    _use_request_llm(request)
+    _require_llm(body.mode)
+    start_usage()
+    set_skip_cache(False)
+    started = time.perf_counter()
+    item = extract_document(pdf, pdf.name, body.mode)
+    item["size"] = pdf.stat().st_size
+    item["case"] = body.case
+    item["output"] = _write_output(body.case, pdf.name, item["result"])
+    return {
+        "result": item,
+        "mode": body.mode,
+        "usage": current_usage(),
+        "elapsed_seconds": round(time.perf_counter() - started, 3),
+    }
 
 
 @app.delete("/api/input")
@@ -310,7 +354,7 @@ def extract_input(body: InputRequest, request: Request):
             seen += 1
             item = extract_document(pdf, pdf.name, body.mode)
             item["size"] = pdf.stat().st_size
-            item["output"] = _write_output(folder.name, pdf.name, item["result"])
+            item["output"] = _write_output(name, pdf.name, item["result"])
             results.append(item)
         if seen >= MAX_FILES:
             break
@@ -379,6 +423,8 @@ def _process_bytes(filename: str, data: bytes, mode: str):
 
 
 def _case_dir(name: str) -> Path | None:
+    if name == ROOT_CASE:
+        return INPUT_ROOT if INPUT_ROOT.is_dir() else None
     if not CASE_DIR.fullmatch(name or ""):
         return None
     folder = (INPUT_ROOT / name).resolve()
@@ -398,7 +444,8 @@ def _next_case_name() -> str:
 
 
 def _write_output(case: str, filename: str, payload: dict) -> str:
-    destination = OUTPUT_ROOT / case / f"{Path(filename).stem}.json"
+    folder = OUTPUT_ROOT if case == ROOT_CASE else OUTPUT_ROOT / case
+    destination = folder / f"{Path(filename).stem}.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return destination.relative_to(REPO_ROOT).as_posix()
