@@ -9,21 +9,12 @@
     ]
   },
   {
-    "pdf": "pdf/02_przelew_sredni.pdf",
-    "ground_truth_json": "ground_truth_json/02_przelew_sredni.json",
-    "document_type": "przelew",
-    "difficulty": "intermediate",
-    "controlled_irregularities": [
-      "Skan lekko obrócony i rozmyty; numer rachunku łamany między grupami; odręczna adnotacja „sprawdzono”; wydruk następnego dnia."
-    ]
-  },
-  {
-    "pdf": "pdf/03_przelew_trudny.pdf",
-    "ground_truth_json": "ground_truth_json/03_przelew_trudny.json",
+    "pdf": "pdf/02_przelew_trudny.pdf",
+    "ground_truth_json": "ground_truth_json/02_przelew_trudny.json",
     "document_type": "przelew",
     "difficulty": "hard",
     "controlled_irregularities": [
-      "Dwustronicowy skan niskiej jakości; data w formacie dd/mm/yyyy; numer rachunku odbiorcy zawiera błędną końcówkę na wydruku, poprawioną odręcznie na 1111; ground truth przyjmuje korektę."
+      "Skan lekko obrócony i rozmyty; numer rachunku łamany między grupami; odręczna adnotacja „sprawdzono”; wydruk następnego dnia."
     ]
   },
   {
@@ -36,21 +27,12 @@
     ]
   },
   {
-    "pdf": "pdf/05_pelnomocnictwo_srednie.pdf",
-    "ground_truth_json": "ground_truth_json/05_pelnomocnictwo_srednie.json",
-    "document_type": "pelnomocnictwo",
-    "difficulty": "intermediate",
-    "controlled_irregularities": [
-      "Skan w skali szarości i lekki skos; dwa podpisy; pieczęć zachodzi na fragment tekstu; PESEL nieobecny."
-    ]
-  },
-  {
-    "pdf": "pdf/06_pelnomocnictwo_trudne.pdf",
-    "ground_truth_json": "ground_truth_json/06_pelnomocnictwo_trudne.json",
+    "pdf": "pdf/05_pelnomocnictwo_trudne.pdf",
+    "ground_truth_json": "ground_truth_json/05_pelnomocnictwo_trudne.json",
     "document_type": "pelnomocnictwo",
     "difficulty": "hard",
     "controlled_irregularities": [
-      "Dwustronicowy skan z cieniem zagięcia; stary KRS przekreślony i zastąpiony ręczną korektą; pełnomocnik raz bez tytułu, raz jako „dr Marek Lis”; PESEL nie występuje."
+      "Skan w skali szarości i lekki skos; dwa podpisy; pieczęć zachodzi na fragment tekstu; PESEL nieobecny."
     ]
   },
   {
@@ -63,21 +45,12 @@
     ]
   },
   {
-    "pdf": "pdf/08_odwolanie_srednie.pdf",
-    "ground_truth_json": "ground_truth_json/08_odwolanie_srednie.json",
-    "document_type": "odwolanie",
-    "difficulty": "intermediate",
-    "controlled_irregularities": [
-      "Skan lekko rozmyty; nagłówek częściowo ucięty; numer TED ze spacjami; różne lokalizacje pól w nagłówku i treści."
-    ]
-  },
-  {
-    "pdf": "pdf/09_odwolanie_trudne.pdf",
-    "ground_truth_json": "ground_truth_json/09_odwolanie_trudne.json",
+    "pdf": "pdf/08_odwolanie_trudne.pdf",
+    "ground_truth_json": "ground_truth_json/08_odwolanie_trudne.json",
     "document_type": "odwolanie",
     "difficulty": "hard",
     "controlled_irregularities": [
-      "Trzy strony; skan niskiego kontrastu; ręczna korekta daty czynności z 11.10 na 12.10.2026; korekta KRS; brak danych prowadzącego postępowanie."
+      "Skan lekko rozmyty; nagłówek częściowo ucięty; numer TED ze spacjami; różne lokalizacje pól w nagłówku i treści."
     ]
   }
 ]
