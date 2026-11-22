@@ -216,8 +216,35 @@ a {
   color: var(--muted);
 }
 
-.mode-bar[hidden] {
+.mode-bar[hidden],
+.task-key[hidden] {
   display: none;
+}
+
+.task-key {
+  margin-top: 16px;
+}
+
+.task-key-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-key-label {
+  font-weight: 600;
+}
+
+.task-key-row .text-input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.case-total {
+  margin: 10px 0 0;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .mode-bar {

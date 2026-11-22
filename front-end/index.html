@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrzetarGO</title>
-    <link rel="stylesheet" href="styles.css?v=25" />
+    <link rel="stylesheet" href="styles.css?v=26" />
   </head>
   <body>
     <header class="site-header">
@@ -52,6 +52,27 @@
           <button type="button" class="is-selected" data-view="task" aria-pressed="true" data-i18n="viewTask">Zadanie Hacknation</button>
           <button type="button" data-view="drop" aria-pressed="false" data-i18n="viewDrop">Przeciągnij i upuść</button>
         </div>
+      </section>
+
+      <section id="task-key" class="task-key" aria-labelledby="task-key-label">
+        <div class="task-key-row">
+          <label id="task-key-label" class="task-key-label" for="task-key-input" data-i18n="taskKeyLabel">Klucz API Mistral</label>
+          <input
+            id="task-key-input"
+            class="text-input"
+            type="password"
+            maxlength="512"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            placeholder="MISTRAL_API_KEY"
+            data-i18n-aria="taskKeyLabel"
+          />
+          <button type="button" id="task-key-add" class="btn btn-primary" data-i18n="taskKeyAdd">Dodaj</button>
+        </div>
+        <p class="input-hint" data-i18n="taskKeyHint">Klucz zostaje tylko w pamięci tej karty. Nie jest zapisywany w przeglądarce, na dysku ani w logach.</p>
+        <p id="task-key-status" class="key-status" role="status"></p>
       </section>
 
       <section class="mode-bar" aria-labelledby="mode-label">
@@ -125,7 +146,6 @@
               <h3 id="input-folder-label" data-i18n="inputFolder">Folder input</h3>
               <div class="input-actions">
                 <button type="button" id="refresh-input" class="btn btn-ghost" data-i18n="refreshInput">Odśwież</button>
-                <button type="button" id="select-all" class="btn btn-ghost" data-i18n="selectAll">Zaznacz wszystkie</button>
                 <button type="button" id="delete-input" class="btn btn-ghost" data-i18n="deleteInput">Usuń input</button>
               </div>
             </div>
@@ -191,6 +211,6 @@
     <footer class="site-footer">
       <p data-i18n="footer">Hacknation 2026 projekt dla Urzędu Zamówień Publicznych</p>
     </footer>
-    <script src="app.js?v=25"></script>
+    <script src="app.js?v=26"></script>
   </body>
 </html>

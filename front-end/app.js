@@ -36,6 +36,12 @@ const copy = {
     viewTask: "Zadanie Hacknation",
     viewDrop: "Przeciągnij i upuść",
     taskMode: "Zadanie Hacknation przetwarza dokumenty trybem Tylko Mistral.",
+    taskKeyLabel: "Klucz API Mistral",
+    taskKeyAdd: "Dodaj",
+    taskKeyHint: "Klucz zostaje tylko w pamięci tej karty. Nie jest zapisywany w przeglądarce, na dysku ani w logach.",
+    taskKeyAdded: "Klucz dodany. Połączono z modelem {model}.",
+    taskKeyEmpty: "Wpisz klucz API.",
+    casesAdded: "Dodano {cases} spraw · {files} plików PDF",
     refreshInput: "Odśwież",
     filesCount: "{count} plików PDF",
     rootCase: "input/ (pliki bez folderu sprawy)",
@@ -65,7 +71,7 @@ const copy = {
     deleteInput: "Usuń input",
     deleteInputConfirm: "Usunąć pliki z folderu input? Folder output zostanie.",
     inputEmpty: "Folder input jest pusty. Skopiuj do niego foldery spraw z plikami PDF (np. input/case1/) i naciśnij Odśwież.",
-    inputHint: "Zaznacz sprawy z folderu input w repozytorium. Każdy PDF da plik JSON o tej samej nazwie w folderze output.",
+    inputHint: "Wszystkie sprawy z folderu input zostaną przetworzone. Każdy PDF da plik JSON o tej samej nazwie w folderze output.",
     dropAria: "Dodaj do 150 plików PDF. Upuść je tutaj albo naciśnij Enter, aby wybrać je z urządzenia.",
     dropTitle: "Upuść pliki PDF tutaj albo dodaj je ze swojego urządzenia.",
     dropHint: "Do 150 plików PDF.",
@@ -163,6 +169,12 @@ const copy = {
     viewTask: "Hacknation Task",
     viewDrop: "Drag & Drop",
     taskMode: "The Hacknation Task processes documents with Mistral only.",
+    taskKeyLabel: "Mistral API key",
+    taskKeyAdd: "Add",
+    taskKeyHint: "The key stays in this tab's memory only. It is not saved in the browser, on disk or in logs.",
+    taskKeyAdded: "Key added. Connected to {model}.",
+    taskKeyEmpty: "Enter an API key.",
+    casesAdded: "Added {cases} cases · {files} PDF files",
     refreshInput: "Refresh",
     filesCount: "{count} PDF files",
     rootCase: "input/ (files outside a case folder)",
@@ -192,7 +204,7 @@ const copy = {
     deleteInput: "Delete input",
     deleteInputConfirm: "Delete the files in the input folder? The output folder will stay.",
     inputEmpty: "The input folder is empty. Copy case folders of PDFs into it (e.g. input/case1/) and press Refresh.",
-    inputHint: "Select cases from the input folder in the repository. Each PDF gives a JSON file with the same name in the output folder.",
+    inputHint: "Every case in the input folder is processed. Each PDF gives a JSON file with the same name in the output folder.",
     dropAria: "Add up to 150 PDF files. Drop them here or press Enter to choose them from your device.",
     dropTitle: "Drop PDFs here or add them from your device.",
     dropHint: "Up to 150 PDFs.",
@@ -290,7 +302,8 @@ const state = {
   nextId: 1,
   notice: null,
   busy: false,
-  selectedCases: new Set(),
+  taskKeyAdded: false,
+  taskKeyModel: "",
   hosted: false,
   serverKey: false,
   samples: [],
@@ -299,7 +312,6 @@ const state = {
   progress: null,
   view: "task",
   run: null,
-  casesTouched: false,
   outputRoot: "",
 };
 
@@ -326,11 +338,16 @@ viewButtons.forEach((button) => {
   button.addEventListener("click", () => selectView(button.dataset.view));
 });
 
-document.querySelector("#select-all").addEventListener("click", () => {
-  state.casesTouched = true;
-  inputCatalog.forEach((item) => state.selectedCases.add(item.name));
-  renderInputCases();
-  renderFiles();
+const taskKeyInput = document.querySelector("#task-key-input");
+const taskKeyAdd = document.querySelector("#task-key-add");
+let taskApiKey = "";
+
+taskKeyAdd.addEventListener("click", addTaskKey);
+taskKeyInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    addTaskKey();
+  }
 });
 
 document.querySelector("#refresh-input").addEventListener("click", () => {
@@ -343,7 +360,6 @@ document.querySelector("#delete-input").addEventListener("click", async () => {
   try {
     const response = await fetch(`${apiBase()}/api/input`, { method: "DELETE" });
     if (!response.ok) throw new Error(String(response.status));
-    state.selectedCases.clear();
     await loadInputCases();
   } catch {
     state.notice = { key: "apiError" };
@@ -436,6 +452,7 @@ function applyCopy() {
   renderNotice();
   renderFiles();
   renderInputCases();
+  renderTaskKeyStatus();
   renderSamples();
   renderKeyStatus();
   renderOutputs();
@@ -465,7 +482,7 @@ function selectMode(mode) {
     button.classList.toggle("is-selected", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
-  bielikSettings.hidden = !needsBielik(mode);
+  bielikSettings.hidden = state.view === "task" || !needsBielik(mode);
 }
 
 function selectView(view) {
@@ -482,7 +499,8 @@ function selectView(view) {
   samplePicker.hidden = task || state.samples.length === 0;
   document.querySelector(".mode-bar").hidden = task;
   document.querySelector("#task-mode").hidden = !task;
-  bielikSettings.hidden = task ? state.serverKey || !needsBielik(TASK_MODE) : !needsBielik(state.mode);
+  document.querySelector("#task-key").hidden = !task;
+  bielikSettings.hidden = task || !needsBielik(state.mode);
   state.notice = null;
   renderNotice();
   renderFiles();
@@ -576,10 +594,51 @@ function plNumber(value) {
 
 function llmHeaders() {
   const headers = {};
-  if (bielikKey.value.trim()) headers["X-LLM-Key"] = bielikKey.value.trim();
-  if (bielikBaseUrl.value.trim()) headers["X-LLM-Base-Url"] = bielikBaseUrl.value.trim();
-  if (bielikModel.value.trim()) headers["X-LLM-Model"] = bielikModel.value.trim();
+  const key = state.view === "task" ? taskApiKey : bielikKey.value.trim();
+  if (key) headers["X-LLM-Key"] = key;
+  if (state.view !== "task" && bielikBaseUrl.value.trim()) headers["X-LLM-Base-Url"] = bielikBaseUrl.value.trim();
+  if (state.view !== "task" && bielikModel.value.trim()) headers["X-LLM-Model"] = bielikModel.value.trim();
   return headers;
+}
+
+async function addTaskKey() {
+  const status = document.querySelector("#task-key-status");
+  const value = taskKeyInput.value.trim();
+  status.className = "key-status";
+  if (!value) {
+    status.classList.add("is-bad");
+    status.textContent = t("taskKeyEmpty");
+    return;
+  }
+  taskKeyAdd.disabled = true;
+  status.textContent = t("bielikChecking");
+  try {
+    const response = await fetch(`${apiBase()}/api/llm/check`, {
+      method: "POST",
+      headers: { "X-LLM-Key": value },
+    });
+    const body = await response.json();
+    if (!response.ok || !body.ok) throw new Error((body && (body.error || body.detail)) || t("bielikKeyRejected"));
+    taskApiKey = value;
+    taskKeyInput.value = "";
+    state.taskKeyAdded = true;
+    state.taskKeyModel = body.model || "Mistral";
+    renderTaskKeyStatus();
+  } catch (error) {
+    taskApiKey = "";
+    state.taskKeyAdded = false;
+    status.classList.add("is-bad");
+    status.textContent = (error && error.message) || t("bielikKeyRejected");
+  } finally {
+    taskKeyAdd.disabled = false;
+  }
+}
+
+function renderTaskKeyStatus() {
+  const status = document.querySelector("#task-key-status");
+  if (!state.taskKeyAdded) return;
+  status.className = "key-status is-ok";
+  status.textContent = t("taskKeyAdded").replace("{model}", state.taskKeyModel || "Mistral");
 }
 
 function renderKeyStatus() {
@@ -790,63 +849,23 @@ function renderInputCases() {
   hint.className = "input-hint";
   hint.textContent = t("inputHint");
   host.append(hint);
-  if (inputCatalog.length === 0) {
+  const files = inputCatalog.reduce((sum, item) => sum + item.files.length, 0);
+  if (files === 0) {
     const empty = document.createElement("p");
     empty.className = "input-hint";
     empty.textContent = t("inputEmpty");
     host.append(empty);
     return;
   }
-  const tree = document.createElement("ul");
-  tree.className = "case-tree";
-  inputCatalog.forEach((item) => {
-    const row = document.createElement("li");
-    const label = document.createElement("label");
-    label.className = "case-name";
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.checked = state.selectedCases.has(item.name);
-    box.disabled = state.busy;
-    box.addEventListener("change", () => {
-      state.casesTouched = true;
-      if (box.checked) state.selectedCases.add(item.name);
-      else state.selectedCases.delete(item.name);
-      renderFiles();
-    });
-    const title = document.createElement("span");
-    title.textContent = caseLabel(item.name);
-    const count = document.createElement("span");
-    count.className = "case-count";
-    count.textContent = t("filesCount").replace("{count}", String(item.files.length));
-    label.append(box, title, count);
-    row.append(label);
-    if (item.files.length > 0) {
-      const details = document.createElement("details");
-      details.open = item.files.length <= 6;
-      const toggle = document.createElement("summary");
-      toggle.textContent = t("filesCount").replace("{count}", String(item.files.length));
-      const files = document.createElement("ul");
-      item.files.forEach((file) => {
-        const fileRow = document.createElement("li");
-        fileRow.textContent = file.name;
-        files.append(fileRow);
-      });
-      details.append(toggle, files);
-      row.append(details);
-    }
-    tree.append(row);
-  });
-  host.append(tree);
-}
-
-function caseLabel(name) {
-  return name === "." ? t("rootCase") : name;
+  const cases = inputCatalog.filter((item) => item.name !== "." && item.files.length > 0).length;
+  const row = document.createElement("p");
+  row.className = "case-total";
+  row.textContent = t("casesAdded").replace("{cases}", String(cases)).replace("{files}", String(files));
+  host.append(row);
 }
 
 function selectedInputFiles() {
-  return inputCatalog
-    .filter((item) => state.selectedCases.has(item.name))
-    .flatMap((item) => item.files.map((file) => ({ case: item.name, file: file.name })));
+  return inputCatalog.flatMap((item) => item.files.map((file) => ({ case: item.name, file: file.name })));
 }
 
 async function loadInputCases() {
@@ -859,9 +878,6 @@ async function loadInputCases() {
   } catch {
     inputCatalog = [];
   }
-  const names = new Set(inputCatalog.map((item) => item.name));
-  if (!state.casesTouched) state.selectedCases = new Set(names);
-  else state.selectedCases = new Set([...state.selectedCases].filter((name) => names.has(name)));
   renderInputCases();
   renderFiles();
 }
@@ -874,10 +890,11 @@ async function submitFiles() {
     : state.files.slice(0, MAX_PDFS).map((item) => ({ upload: item.file, name: item.file.name }));
   if (jobs.length === 0) return;
   const mode = task ? TASK_MODE : state.mode;
-  if (needsBielik(mode) && !bielikKey.value.trim() && !state.serverKey) {
+  const hasKey = task ? taskApiKey || state.serverKey : bielikKey.value.trim() || state.serverKey;
+  if (needsBielik(mode) && !hasKey) {
     state.notice = { key: "bielikKeyMissing" };
     renderNotice();
-    bielikKey.focus();
+    (task ? taskKeyInput : bielikKey).focus();
     return;
   }
   state.busy = true;
