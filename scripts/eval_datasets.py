@@ -268,7 +268,7 @@ def _draw(payload: dict) -> None:
     positions = list(range(len(groups)))
     colours = [RED if group["f1"] == weakest else NAVY for group in groups]
     scores = [group["f1"] for group in groups]
-    axis.barh(positions, scores, color=colours, height=0.72, zorder=2)
+    axis.barh(positions, scores, color=colours, height=0.86, zorder=2)
     axis.set_yticks(positions)
     axis.set_yticklabels(
         [f"{group['label']}    n = {group['n']}" for group in groups],
@@ -289,8 +289,8 @@ def _draw(payload: dict) -> None:
             axis.text(score - 0.015, index, _comma(score, 2), ha="right", va="center", fontsize=20, color="white")
         else:
             axis.text(score + 0.02, index, _comma(score, 2), ha="left", va="center", fontsize=20, color=colour)
-    axis.set_title("F1 według zestawu", loc="left", fontsize=28, color=NAVY, pad=12)
-    figure.subplots_adjust(left=0.40, right=0.98, top=0.90, bottom=0.04)
+    figure.text(0.015, 0.96, "F1 według zestawu", ha="left", va="top", fontsize=28, color=NAVY)
+    figure.subplots_adjust(left=0.34, right=0.985, top=0.90, bottom=0.03)
     SLIDE.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(SLIDE, dpi=120, facecolor="white")
     plt.close(figure)
