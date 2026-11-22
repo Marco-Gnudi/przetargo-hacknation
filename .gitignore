@@ -26,3 +26,7 @@ local.properties
 *.aab
 # Cached Bielik responses (prompt + text hash)
 backend/.cache/
+# Generated results and evaluation reports
+output/*
+!output/.gitkeep
+reports/
