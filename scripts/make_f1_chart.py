@@ -12,7 +12,9 @@ import matplotlib.pyplot as plt
 
 ROOT = Path(__file__).resolve().parents[1]
 STATS = ROOT / "reports" / "stats.json"
+FALLBACK_STATS = ROOT / "front-end" / "assets" / "stats" / "stats.json"
 OUTPUT = ROOT / "reports" / "charts" / "f1_overview.png"
+SLIDE = ROOT / "docs" / "slides" / "f1_overview.png"
 
 NAVY = "#1F2A44"
 GREY = "#E6E8EC"
@@ -27,7 +29,8 @@ TYPES = (
 
 
 def main() -> None:
-    stats = json.loads(STATS.read_text(encoding="utf-8"))
+    source = STATS if STATS.is_file() else FALLBACK_STATS
+    stats = json.loads(source.read_text(encoding="utf-8"))
     plt.rcParams["font.family"] = "Segoe UI"
     figure = plt.figure(figsize=(16, 9), dpi=120, facecolor="white")
     grid = figure.add_gridspec(1, 4, width_ratios=[1.45, 1, 1, 1])
@@ -35,10 +38,11 @@ def main() -> None:
     for index, (key, label) in enumerate(TYPES, start=1):
         _donut(figure.add_subplot(grid[0, index]), stats["types"][key], label)
     figure.subplots_adjust(left=0.03, right=0.98, top=0.92, bottom=0.08, wspace=0.05)
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(OUTPUT, dpi=120, facecolor="white")
+    for path in (OUTPUT, SLIDE):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        figure.savefig(path, dpi=120, facecolor="white")
+        print(path)
     plt.close(figure)
-    print(OUTPUT)
 
 
 def _headline(axis, stats: dict) -> None:

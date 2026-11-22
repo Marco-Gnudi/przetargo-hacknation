@@ -343,8 +343,12 @@ function apiBase() {
   return "";
 }
 
+// Set true to show the Statystyki tab again. The view, API and chart stay in place.
+const SHOW_STATS = false;
 const STAT_TYPES = ["odwolanie", "pelnomocnictwo", "przelew"];
 let statsPayload = null;
+
+if (SHOW_STATS) document.querySelector(".view-switch").hidden = false;
 
 document.querySelector("#view-extract").addEventListener("click", () => showView("extract"));
 document.querySelector("#view-stats").addEventListener("click", () => showView("stats"));

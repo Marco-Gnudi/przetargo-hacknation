@@ -26,4 +26,4 @@ gh pr create --fill
 
 `start_ui.bat` starts the app at http://localhost:8000. Regular mode is Wiktor's deterministic extractor. Bielik mode keeps those values and fills empty fields from `backend/`. `./back-end2/start.sh` starts the same server.
 
-`python scripts/make_f1_chart.py` reads `reports/stats.json` from `backend/scripts/evaluate.py` and writes `reports/charts/f1_overview.png`.
+`python scripts/make_f1_chart.py` reads `reports/stats.json` and writes the slide at `docs/slides/f1_overview.png`.

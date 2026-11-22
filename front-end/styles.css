@@ -66,6 +66,10 @@ a {
   gap: 4px;
 }
 
+.view-switch[hidden] {
+  display: none;
+}
+
 .view-switch button {
   border: 1px solid transparent;
   border-radius: 999px;
