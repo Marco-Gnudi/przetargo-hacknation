@@ -1,22 +1,22 @@
-"""Score each data set with the same field metric as evaluate.py.
+"""Score every data set in deterministic mode and, with a typed key, hybrid mode.
 
     python scripts/eval_datasets.py
     python scripts/eval_datasets.py --chart-only
 
-Bielik mode, LLM cache on: rules first, then the model fills empty fields.
+Hybrid mode ignores the LLM cache so the seconds are from this run.
+The Mistral key is typed at startup and kept in memory only.
 Writes reports/stats_datasets.json and docs/slides/datasets_comparison.png.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextvars
 import importlib.util
 import json
-import re
 import sys
 import threading
 import time
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -27,13 +27,11 @@ SLIDE = ROOT / "docs" / "slides" / "datasets_comparison.png"
 NAVY = "#1F2A44"
 RED = "#C8102E"
 
-# Chart order. A group with no documents is left out.
 GROUPS = (
     ("uzp_text", "UZP, tekst"),
     ("uzp_scan", "UZP, skany"),
     ("uzp_negative", "UZP, negatywne"),
     ("irregular_easy", "Nieregularne, łatwe"),
-    ("irregular_mid", "Nieregularne, średnie"),
     ("irregular_hard", "Nieregularne, trudne"),
     ("synth_odwolanie", "Skany syntetyczne, odwołanie"),
     ("synth_pelnomocnictwo", "Skany syntetyczne, pełnomocnictwo"),
@@ -41,6 +39,7 @@ GROUPS = (
     ("synth_negative", "Skany syntetyczne, negatywne"),
 )
 
+MODE_LABELS = {"regular": "Reguły", "bielik": "Reguły + Mistral"}
 _NEEDED = threading.local()
 
 
@@ -49,14 +48,37 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--chart-only", action="store_true", help="Redraw the slide from stats_datasets.json.")
     args = parser.parse_args(argv)
     if args.chart_only:
-        payload = json.loads(STATS.read_text(encoding="utf-8"))
-        _draw(payload)
+        _draw(json.loads(STATS.read_text(encoding="utf-8")))
         return 0
-    payload = _evaluate()
-    STATS.parent.mkdir(parents=True, exist_ok=True)
-    STATS.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"wrote {STATS}")
-    _print_table(payload)
+
+    if str(ROOT / "scripts") not in sys.path:
+        sys.path.insert(0, str(ROOT / "scripts"))
+    evaluate = _load_evaluate()
+    from ask_mistral import accept_key
+    from odwolania.config import task_data_dir
+    from odwolania.llm import set_skip_cache
+
+    key_ok = accept_key()
+    set_skip_cache(True)
+    rules = evaluate.load_rules()
+    jobs = _jobs(task_data_dir())
+    if not jobs:
+        print("No PDFs found.", file=sys.stderr)
+        return 2
+
+    payload = {
+        "cache": "off",
+        "scoring": "field exact match, same totals as backend/scripts/evaluate.py",
+        "modes": {},
+    }
+    for mode in ("regular", "bielik"):
+        if mode == "bielik" and not key_ok:
+            continue
+        print(f"scoring {len(jobs)} PDFs  mode {mode}  cache off", flush=True)
+        payload["modes"][mode] = _run(evaluate, jobs, rules, mode)
+        _write(payload)
+        print(MODE_LABELS[mode])
+        _print_table(payload["modes"][mode])
     try:
         _draw(payload)
     except ImportError:
@@ -64,58 +86,43 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _evaluate() -> dict:
-    evaluate = _load_evaluate()
-    from odwolania.config import task_data_dir
-    from odwolania.llm import load_env, set_skip_cache, start_usage, current_usage
+def _run(evaluate, jobs: list[tuple[Path, str | None]], rules: dict, mode: str) -> dict:
+    from odwolania.llm import current_usage, start_usage
     from odwolania import llm_extractor
     import vision_fill
 
-    load_env()
-    set_skip_cache(False)
-    rules = evaluate.load_rules()
     _install_need_markers(llm_extractor, vision_fill)
-
-    jobs = _jobs(task_data_dir())
-    if not jobs:
-        print("No PDFs found.", file=sys.stderr)
-        raise SystemExit(2)
-    print(f"scoring {len(jobs)} PDFs  mode bielik  cache on", flush=True)
-
     rows: list[dict | None] = [None] * len(jobs)
 
     def job(pdf: Path, group: str | None) -> dict:
         start_usage()
         _NEEDED.hit = False
         started = time.perf_counter()
-        scored = evaluate._score_pdf(pdf, "bielik", rules)
-        seconds = time.perf_counter() - started
-        needed = bool(getattr(_NEEDED, "hit", False)) or int(current_usage().get("calls", 0)) > 0
-        scored["seconds"] = seconds
-        scored["llm"] = needed
+        scored = evaluate._score_pdf(pdf, mode, rules)
+        scored["seconds"] = time.perf_counter() - started
+        scored["llm"] = bool(getattr(_NEEDED, "hit", False)) or int(current_usage().get("calls", 0)) > 0
         scored["group"] = group or _group_after_score(pdf, scored)
         return scored
 
     done = 0
     with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {pool.submit(job, pdf, group): index for index, (pdf, group) in enumerate(jobs)}
+        futures = {}
+        for index, (pdf, group) in enumerate(jobs):
+            ctx = contextvars.copy_context()
+            futures[pool.submit(ctx.run, job, pdf, group)] = index
         for future in as_completed(futures):
             rows[futures[future]] = future.result()
             done += 1
             if done % 20 == 0 or done == len(jobs):
                 print(f"  {done}/{len(jobs)}", flush=True)
-
-    finished = [row for row in rows if row is not None]
-    unknown = [row for row in finished if row["group"] is None]
-    if unknown:
-        names = ", ".join(str(row["file"]) for row in unknown[:8])
-        print(f"skipped {len(unknown)} PDF(s) with no group: {names}", file=sys.stderr)
-    finished = [row for row in finished if row["group"] is not None]
-    return _payload(finished)
+    finished = [row for row in rows if row is not None and row["group"] is not None]
+    skipped = len(rows) - len(finished)
+    if skipped:
+        print(f"skipped {skipped} PDF(s) with no group", file=sys.stderr)
+    return _mode_payload(finished)
 
 
 def _jobs(task_root: Path) -> list[tuple[Path, str | None]]:
-    """PDFs paired with a group id when the file name already decides it."""
     found: list[tuple[Path, str | None]] = []
     dane = task_root / "dane"
     if dane.is_dir():
@@ -123,6 +130,8 @@ def _jobs(task_root: Path) -> list[tuple[Path, str | None]]:
     irregular = ROOT / "test_data" / "polish_synthetic_test_suite"
     if irregular.is_dir():
         for pdf in sorted(irregular.rglob("*.pdf")):
+            if "archive" in pdf.parts:
+                continue
             found.append((pdf, _irregular_group(pdf)))
     scans = ROOT / "test_data" / "synthetic_scans"
     if scans.is_dir():
@@ -134,8 +143,6 @@ def _irregular_group(pdf: Path) -> str | None:
     stem = pdf.stem.lower()
     if "latw" in stem:
         return "irregular_easy"
-    if "sred" in stem:
-        return "irregular_mid"
     if "trud" in stem:
         return "irregular_hard"
     return None
@@ -155,7 +162,8 @@ def _group_after_score(pdf: Path, row: dict) -> str | None:
 
 
 def _install_need_markers(llm_extractor, vision_fill) -> None:
-    """A cached reply never increments the call counter, but the document still asked."""
+    if getattr(llm_extractor._cached_json, "_przetargo_marked", False):
+        return
     cached_json = llm_extractor._cached_json
     cached_reply = vision_fill._cached_reply
 
@@ -167,11 +175,12 @@ def _install_need_markers(llm_extractor, vision_fill) -> None:
         _NEEDED.hit = True
         return cached_reply(*args, **kwargs)
 
+    mark_json._przetargo_marked = True
     llm_extractor._cached_json = mark_json
     vision_fill._cached_reply = mark_reply
 
 
-def _payload(rows: list[dict]) -> dict:
+def _mode_payload(rows: list[dict]) -> dict:
     labels = dict(GROUPS)
     groups = []
     for key, _label in GROUPS:
@@ -190,21 +199,7 @@ def _payload(rows: list[dict]) -> dict:
             "seconds_per_document": round(sum(row["seconds"] for row in chosen) / len(chosen), 2),
             "llm_percent": round(100 * needed / len(chosen), 1),
         })
-    counts: dict[str, int] = defaultdict(int)
-    for row in rows:
-        for item in row["mismatches"]:
-            counts[re.sub(r"\[\d+\]", "[]", item["field"])] += 1
-    weakest = [
-        {"field": field, "misses": count}
-        for field, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:10]
-    ]
-    return {
-        "mode": "bielik",
-        "cache": "on",
-        "scoring": "field exact match, same totals as backend/scripts/evaluate.py",
-        "groups": groups,
-        "weakest_fields": weakest,
-    }
+    return {"label": None, "groups": groups}
 
 
 def _pack(selected: list[dict]) -> dict:
@@ -226,7 +221,15 @@ def _pack(selected: list[dict]) -> dict:
     }
 
 
-def _print_table(payload: dict) -> None:
+def _write(payload: dict) -> None:
+    for mode, body in payload["modes"].items():
+        body["label"] = MODE_LABELS[mode]
+    STATS.parent.mkdir(parents=True, exist_ok=True)
+    STATS.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {STATS}")
+
+
+def _print_table(mode_body: dict) -> None:
     header = ["group", "n", "P", "R", "F1", "s/doc", "LLM%"]
     table = [
         [
@@ -238,7 +241,7 @@ def _print_table(payload: dict) -> None:
             _comma(group["seconds_per_document"], 2),
             f"{_comma(group['llm_percent'], 1)}%",
         ]
-        for group in payload["groups"]
+        for group in mode_body["groups"]
     ]
     rendered = [[str(cell) for cell in row] for row in table]
     widths = [len(cell) for cell in header]
@@ -250,47 +253,55 @@ def _print_table(payload: dict) -> None:
     for row in rendered:
         print("  ".join(cell.ljust(widths[index]) for index, cell in enumerate(row)))
     print()
-    print("weakest fields")
-    for item in payload["weakest_fields"][:3]:
-        print(f"  {item['misses']:4d}  {item['field']}")
 
 
 def _draw(payload: dict) -> None:
     import matplotlib.pyplot as plt
 
-    groups = payload["groups"]
-    if not groups:
-        raise SystemExit("No groups in stats_datasets.json")
-    weakest = min(group["f1"] for group in groups)
+    modes = payload.get("modes") or {}
+    series = [(key, MODE_LABELS[key], NAVY if key == "regular" else RED) for key in ("regular", "bielik") if key in modes]
+    if not series:
+        raise SystemExit("No modes in stats_datasets.json")
+    present = []
+    for key, label in GROUPS:
+        if any(group["id"] == key for body in modes.values() for group in body["groups"]):
+            present.append((key, label))
     plt.rcParams["font.family"] = "Segoe UI"
     figure, axis = plt.subplots(figsize=(16, 9), dpi=120, facecolor="white")
     axis.set_facecolor("white")
-    positions = list(range(len(groups)))
-    colours = [RED if group["f1"] == weakest else NAVY for group in groups]
-    scores = [group["f1"] for group in groups]
-    axis.barh(positions, scores, color=colours, height=0.86, zorder=2)
+    count = len(series)
+    height = 0.78 / count
+    positions = list(range(len(present)))
+    lookup = {
+        mode: {group["id"]: group for group in modes[mode]["groups"]}
+        for mode, _label, _color in series
+    }
+    for index, (mode, label, color) in enumerate(series):
+        offset = (index - (count - 1) / 2) * height
+        scores = [lookup[mode][key]["f1"] for key, _label in present]
+        axis.barh([pos + offset for pos in positions], scores, height=height * 0.92, color=color, label=label, zorder=2)
+        for pos, (key, _label) in enumerate(present):
+            score = lookup[mode][key]["f1"]
+            text = _comma(score, 2)
+            if score >= 0.28:
+                axis.text(score - 0.012, pos + offset, text, ha="right", va="center", fontsize=13, color="white")
+            else:
+                axis.text(score + 0.012, pos + offset, text, ha="left", va="center", fontsize=13, color=color)
+    names = []
+    for key, label in present:
+        sample = next(lookup[mode][key] for mode, _label, _color in series if key in lookup[mode])
+        names.append(f"{label}    n = {sample['n']}")
     axis.set_yticks(positions)
-    axis.set_yticklabels(
-        [f"{group['label']}    n = {group['n']}" for group in groups],
-        fontsize=18,
-        color=NAVY,
-    )
+    axis.set_yticklabels(names, fontsize=16, color=NAVY)
     axis.invert_yaxis()
-    axis.set_xlim(0, 1.08)
-    axis.set_ylim(len(groups) - 0.55, -0.65)
+    axis.set_xlim(0, 1.12)
+    axis.set_ylim(len(present) - 0.55, -0.62)
     axis.set_xticks([])
     for spine in axis.spines.values():
         spine.set_visible(False)
-    axis.tick_params(axis="y", length=0, pad=8)
-    for index, group in enumerate(groups):
-        colour = RED if group["f1"] == weakest else NAVY
-        score = group["f1"]
-        if score >= 0.22:
-            axis.text(score - 0.015, index, _comma(score, 2), ha="right", va="center", fontsize=20, color="white")
-        else:
-            axis.text(score + 0.02, index, _comma(score, 2), ha="left", va="center", fontsize=20, color=colour)
-    figure.text(0.015, 0.96, "F1 według zestawu", ha="left", va="top", fontsize=28, color=NAVY)
-    figure.subplots_adjust(left=0.34, right=0.985, top=0.90, bottom=0.03)
+    axis.tick_params(axis="y", length=0, pad=6)
+    axis.legend(frameon=False, fontsize=16, loc="lower right")
+    figure.subplots_adjust(left=0.36, right=0.98, top=0.98, bottom=0.03)
     SLIDE.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(SLIDE, dpi=120, facecolor="white")
     plt.close(figure)
