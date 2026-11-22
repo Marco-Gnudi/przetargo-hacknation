@@ -9,7 +9,19 @@ const detail = document.querySelector("#detail");
 const resultsBody = document.querySelector("#results-body");
 const modeButtons = document.querySelectorAll("[data-mode]");
 const langButtons = document.querySelectorAll("[data-lang]");
-const MAX_PDFS = 30;
+const bielikSettings = document.querySelector("#bielik-settings");
+const bielikKey = document.querySelector("#bielik-key");
+const bielikBaseUrl = document.querySelector("#bielik-base-url");
+const bielikModel = document.querySelector("#bielik-model");
+const bielikStatus = document.querySelector("#bielik-status");
+const bielikCheck = document.querySelector("#bielik-check");
+const samplePicker = document.querySelector("#sample-picker");
+const sampleSelect = document.querySelector("#sample-select");
+const sampleLoad = document.querySelector("#sample-load");
+const inputFolder = document.querySelector("#input-folder");
+const ocrWarning = document.querySelector("#ocr-warning");
+const MAX_PDFS = 150;
+const UPLOAD_BATCH = 10;
 
 const copy = {
   pl: {
@@ -32,9 +44,9 @@ const copy = {
     deleteInputConfirm: "Usunąć pliki z folderu input? Folder output zostanie.",
     inputEmpty: "Folder input jest pusty. Dodaj katalog sprawy z plikami PDF.",
     inputHint: "Zaznacz sprawy z folderu input. Wynik trafi do folderu output.",
-    dropAria: "Dodaj do 30 plików PDF. Upuść je tutaj albo naciśnij Enter, aby wybrać je z urządzenia.",
+    dropAria: "Dodaj do 150 plików PDF. Upuść je tutaj albo naciśnij Enter, aby wybrać je z urządzenia.",
     dropTitle: "Upuść pliki PDF tutaj albo dodaj je ze swojego urządzenia.",
-    dropHint: "Do 30 plików PDF.",
+    dropHint: "Do 150 plików PDF.",
     process: "Przetwórz dokumenty",
     summary: "Podsumowanie",
     summaryEmpty: "Kompletność i brakujące informacje pojawią się po przetworzeniu sprawy.",
@@ -50,9 +62,10 @@ const copy = {
     colStatus: "Status",
     noCases: "Brak spraw.",
     processingNow: "Przetwarzanie…",
-    apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom back-end2/start.sh.",
+    processingCount: "Przetwarzanie {done}/{total}…",
+    apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom ponownie ./start.sh (w Windows start.bat).",
     emptyFiles: "Ten plik ma 0 bajtów w oknie wyboru, więc nie ma w nim treści PDF. Wybierz PDF, przy którym widać rozmiar.",
-    tooMany: "Można dodać najwyżej 30 plików PDF.",
+    tooMany: "Można dodać najwyżej 150 plików PDF.",
     uncertain: "Niepewne",
     filesTotal: "{count} plików · {size}",
     bielikNote: "Model Mistral nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
@@ -78,13 +91,33 @@ const copy = {
       przelew: "Potwierdzenie przelewu",
       unknown: "Nierozpoznany dokument",
     },
-    statuses: { ok: "Przetworzono", unrecognized: "Nierozpoznany", error: "Błąd" },
+    statuses: { ok: "Przetworzono", unrecognized: "Nierozpoznany", needs_ocr: "Wymaga OCR", error: "Błąd" },
     remove: "Usuń",
     pdfOnly: "Można dodać tylko pliki PDF. Pominięto: {names}",
     already: "Te pliki PDF są już dodane.",
     pending: "Jeszcze nieprzetworzone",
     footer: "Hacknation 2026 projekt dla Urzędu Zamówień Publicznych",
     modeName: { regular: "przetwarzanie regularne", bielik: "Mistral", bielik_only: "Tylko Mistral" },
+    apiErrorHosted: "Ekstraktor nie odpowiada. Odśwież stronę i spróbuj ponownie.",
+    bielikKeyTitle: "Klucz API Mistral",
+    bielikKeyHint: "Klucz jest tylko w pamięci tej karty i trafia wyłącznie do lokalnego serwera PrzetarGO. Nie jest nigdzie zapisywany.",
+    bielikCheck: "Sprawdź połączenie",
+    bielikAdvanced: "Ustawienia zaawansowane",
+    bielikBaseUrl: "Adres API (zgodny z OpenAI)",
+    bielikModel: "Model",
+    bielikChecking: "Sprawdzanie połączenia…",
+    bielikOk: "Połączono z modelem {model}.",
+    bielikServerKey: "Serwer ma ustawiony MISTRAL_API_KEY. Zostaw pole puste, aby go użyć.",
+    bielikKeyMissing: "Wpisz klucz API Mistral albo wybierz tryb Regularne.",
+    bielikKeyRejected: "API odrzuciło klucz albo model. Sprawdź klucz i spróbuj ponownie.",
+    llmFailures: "nieudane: {count}",
+    ocrMissing: "Tesseract OCR nie jest zainstalowany, więc skany nie zostaną odczytane. PDF-y z tekstem działają. Uruchom: python doctor.py",
+    needsOcr: "To skan bez warstwy tekstowej i nie udało się go odczytać przez OCR. Wynik jest pusty, a nie zgadywany.",
+    sampleTitle: "Wypróbuj przykładową sprawę",
+    sampleLoad: "Dodaj pliki",
+    sampleText: "Sprawa {id} · PDF z tekstem",
+    sampleScan: "Skany {id} · OCR",
+    sampleError: "Nie udało się pobrać przykładowych plików.",
   },
   en: {
     title: "PrzetarGO",
@@ -106,9 +139,9 @@ const copy = {
     deleteInputConfirm: "Delete the files in the input folder? The output folder will stay.",
     inputEmpty: "The input folder is empty. Add a case folder of PDFs.",
     inputHint: "Select cases from the input folder. Results are written to the output folder.",
-    dropAria: "Add up to 30 PDF files. Drop them here or press Enter to choose them from your device.",
+    dropAria: "Add up to 150 PDF files. Drop them here or press Enter to choose them from your device.",
     dropTitle: "Drop PDFs here or add them from your device.",
-    dropHint: "Up to 30 PDFs.",
+    dropHint: "Up to 150 PDFs.",
     process: "Process documents",
     summary: "Summary",
     summaryEmpty: "Completeness and missing information will show here after a case is processed.",
@@ -124,9 +157,10 @@ const copy = {
     colStatus: "Status",
     noCases: "No cases yet.",
     processingNow: "Processing…",
-    apiError: "The extractor did not respond. Refresh this page. If it still fails, run back-end2/start.sh.",
+    processingCount: "Processing {done}/{total}…",
+    apiError: "The extractor did not respond. Refresh this page. If it still fails, run ./start.sh again (start.bat on Windows).",
     emptyFiles: "That file is 0 bytes in the file window, so it has no PDF content. Choose a PDF that shows a size.",
-    tooMany: "You can add up to 30 PDFs.",
+    tooMany: "You can add up to 150 PDFs.",
     uncertain: "Uncertain",
     filesTotal: "{count} files · {size}",
     bielikNote: "Mistral is not connected. This run used the deterministic extractor.",
@@ -152,13 +186,33 @@ const copy = {
       przelew: "Transfer confirmation",
       unknown: "Unrecognized document",
     },
-    statuses: { ok: "Processed", unrecognized: "Unrecognized", error: "Error" },
+    statuses: { ok: "Processed", unrecognized: "Unrecognized", needs_ocr: "Needs OCR", error: "Error" },
     remove: "Remove",
     pdfOnly: "Only PDF files can be added. Skipped: {names}",
     already: "Those PDFs are already attached.",
     pending: "Not processed yet",
     footer: "HackNation 2026 project for the Public Procurement Office",
     modeName: { regular: "regular processing", bielik: "Mistral", bielik_only: "Mistral only" },
+    apiErrorHosted: "The extractor did not respond. Refresh the page and try again.",
+    bielikKeyTitle: "Mistral API key",
+    bielikKeyHint: "The key stays in this tab's memory and is sent only to your local PrzetarGO server. It is never saved.",
+    bielikCheck: "Check connection",
+    bielikAdvanced: "Advanced settings",
+    bielikBaseUrl: "API base URL (OpenAI-compatible)",
+    bielikModel: "Model",
+    bielikChecking: "Checking the connection…",
+    bielikOk: "Connected to {model}.",
+    bielikServerKey: "The server has MISTRAL_API_KEY set. Leave this empty to use it.",
+    bielikKeyMissing: "Enter a Mistral API key, or choose Regular mode.",
+    bielikKeyRejected: "The API rejected the key or the model. Check the key and try again.",
+    llmFailures: "failed: {count}",
+    ocrMissing: "Tesseract OCR is not installed, so scans cannot be read. Text PDFs still work. Run: python doctor.py",
+    needsOcr: "This is a scan with no text layer and OCR could not read it. The result is empty, not guessed.",
+    sampleTitle: "Try an example case",
+    sampleLoad: "Add files",
+    sampleText: "Case {id} · text PDFs",
+    sampleScan: "Scans {id} · OCR",
+    sampleError: "The example files could not be downloaded.",
   },
 };
 
@@ -171,9 +225,24 @@ const state = {
   notice: null,
   busy: false,
   selectedCases: new Set(),
+  hosted: false,
+  serverKey: false,
+  samples: [],
+  keyStatus: null,
+  keyModel: "",
+  progress: null,
 };
 
 let inputCatalog = [];
+
+[bielikKey, bielikBaseUrl, bielikModel].forEach((field) => {
+  field.addEventListener("input", () => {
+    state.keyStatus = null;
+    renderKeyStatus();
+  });
+});
+bielikCheck.addEventListener("click", checkKey);
+sampleLoad.addEventListener("click", loadSample);
 
 langButtons.forEach((button) => {
   button.addEventListener("click", () => setLang(button.dataset.lang));
@@ -284,6 +353,8 @@ function applyCopy() {
   renderNotice();
   renderFiles();
   renderInputCases();
+  renderSamples();
+  renderKeyStatus();
   renderOutputs();
 }
 
@@ -294,6 +365,10 @@ function renderNotice() {
   }
   if (state.notice.text) {
     inputMessage.textContent = state.notice.text;
+    return;
+  }
+  if (state.notice.key === "apiError") {
+    inputMessage.textContent = apiErrorText();
     return;
   }
   const names = state.notice.names ? state.notice.names.join(", ") : "";
@@ -307,12 +382,126 @@ function selectMode(mode) {
     button.classList.toggle("is-selected", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
+  bielikSettings.hidden = !needsBielik(mode);
+}
+
+function needsBielik(mode) {
+  return mode === "bielik" || mode === "bielik_only";
 }
 
 function apiBase() {
-  const here = location.hostname === "127.0.0.1" || location.hostname === "localhost";
-  if (here && location.port === "8000") return "";
-  return "http://127.0.0.1:8000";
+  const local = location.hostname === "127.0.0.1" || location.hostname === "localhost";
+  // start_ui.bat serves the page on :8080 and the API on :8000; a deployed site serves both.
+  if (location.protocol === "file:" || (local && location.port === "8080")) return "http://127.0.0.1:8000";
+  return "";
+}
+
+function llmHeaders() {
+  const headers = {};
+  if (bielikKey.value.trim()) headers["X-LLM-Key"] = bielikKey.value.trim();
+  if (bielikBaseUrl.value.trim()) headers["X-LLM-Base-Url"] = bielikBaseUrl.value.trim();
+  if (bielikModel.value.trim()) headers["X-LLM-Model"] = bielikModel.value.trim();
+  return headers;
+}
+
+function renderKeyStatus() {
+  bielikStatus.className = "key-status";
+  if (state.keyStatus === "checking") {
+    bielikStatus.textContent = t("bielikChecking");
+  } else if (state.keyStatus === "ok") {
+    bielikStatus.classList.add("is-ok");
+    bielikStatus.textContent = t("bielikOk").replace("{model}", state.keyModel || "Mistral");
+  } else if (state.keyStatus && state.keyStatus.error) {
+    bielikStatus.classList.add("is-bad");
+    bielikStatus.textContent = state.keyStatus.error;
+  } else if (state.serverKey && !bielikKey.value.trim()) {
+    bielikStatus.textContent = t("bielikServerKey");
+  } else {
+    bielikStatus.textContent = "";
+  }
+}
+
+async function checkKey() {
+  state.keyStatus = "checking";
+  renderKeyStatus();
+  try {
+    const response = await fetch(`${apiBase()}/api/llm/check`, { method: "POST", headers: llmHeaders() });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.detail || String(response.status));
+    state.keyModel = body.model || "";
+    state.keyStatus = body.ok ? "ok" : { error: body.error || t("bielikKeyMissing") };
+  } catch (error) {
+    state.keyStatus = { error: error.message || apiErrorText() };
+  }
+  renderKeyStatus();
+}
+
+function apiErrorText() {
+  return state.hosted ? t("apiErrorHosted") : t("apiError");
+}
+
+async function loadServerInfo() {
+  try {
+    const response = await fetch(`${apiBase()}/api/health`);
+    if (!response.ok) throw new Error(String(response.status));
+    const body = await response.json();
+    state.hosted = Boolean(body.hosted);
+    state.serverKey = Boolean(body.server_key);
+    ocrWarning.hidden = body.ocr !== false;
+  } catch {
+    state.hosted = false;
+  }
+  inputFolder.hidden = state.hosted;
+  renderKeyStatus();
+  if (!state.hosted) loadInputCases();
+}
+
+async function loadSamples() {
+  try {
+    const response = await fetch(`${apiBase()}/api/samples`);
+    if (!response.ok) throw new Error(String(response.status));
+    const body = await response.json();
+    state.samples = body.samples || [];
+  } catch {
+    state.samples = [];
+  }
+  renderSamples();
+}
+
+function renderSamples() {
+  samplePicker.hidden = state.samples.length === 0;
+  const chosen = sampleSelect.value;
+  sampleSelect.replaceChildren();
+  state.samples.forEach((sample) => {
+    const option = document.createElement("option");
+    option.value = sample.id;
+    const id = sample.id.replace(/^(przyklad|skany)_/, "");
+    option.textContent = t(sample.kind === "scan" ? "sampleScan" : "sampleText").replace("{id}", id);
+    sampleSelect.append(option);
+  });
+  if (chosen) sampleSelect.value = chosen;
+}
+
+async function loadSample() {
+  const sample = state.samples.find((item) => item.id === sampleSelect.value);
+  if (!sample || state.busy) return;
+  sampleLoad.disabled = true;
+  try {
+    const files = await Promise.all(
+      sample.files.map(async (entry) => {
+        const response = await fetch(`${apiBase()}/api/samples/file?path=${encodeURIComponent(entry.path)}`);
+        if (!response.ok) throw new Error(String(response.status));
+        const blob = await response.blob();
+        return new File([blob], entry.name, { type: "application/pdf", lastModified: 0 });
+      })
+    );
+    await addFiles(files);
+  } catch {
+    state.notice = { key: "sampleError" };
+    renderNotice();
+  } finally {
+    sampleLoad.disabled = false;
+  }
 }
 
 async function addFiles(fileListLike) {
@@ -408,7 +597,9 @@ function renderFiles() {
     });
   }
   submitButton.disabled = state.busy || (state.files.length === 0 && state.selectedCases.size === 0);
-  submitButton.textContent = state.busy ? t("processingNow") : t("process");
+  if (!state.busy) submitButton.textContent = t("process");
+  else if (state.progress) submitButton.textContent = t("processingCount").replace("{done}", state.progress.done).replace("{total}", state.progress.total);
+  else submitButton.textContent = t("processingNow");
 }
 
 function renderInputCases() {
@@ -475,6 +666,12 @@ async function submitFiles() {
   const cases = [...state.selectedCases];
   if ((selected.length === 0 && cases.length === 0) || state.busy) return;
   const mode = state.mode;
+  if (needsBielik(mode) && !bielikKey.value.trim() && !state.serverKey) {
+    state.notice = { key: "bielikKeyMissing" };
+    renderNotice();
+    bielikKey.focus();
+    return;
+  }
   state.busy = true;
   state.notice = null;
   renderFiles();
@@ -487,10 +684,10 @@ async function submitFiles() {
     if (cases.length > 0) {
       const response = await fetch(`${apiBase()}/api/extract/input`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...llmHeaders() },
         body: JSON.stringify({ cases, mode }),
       });
-      if (!response.ok) throw new Error(String(response.status));
+      await ensureOk(response);
       const body = await response.json();
       results.push(...(body.results || []));
       elapsed += Number(body.elapsed_seconds) || 0;
@@ -498,16 +695,30 @@ async function submitFiles() {
       servedMode = body.mode || servedMode;
     }
     if (selected.length > 0) {
-      const form = new FormData();
-      form.append("mode", mode);
-      selected.forEach((item) => form.append("files", item.file, item.file.name));
-      const response = await fetch(`${apiBase()}/api/extract/batch`, { method: "POST", body: form });
-      if (!response.ok) throw new Error(String(response.status));
-      const body = await response.json();
-      results.push(...(body.results || []));
-      elapsed += Number(body.elapsed_seconds) || 0;
-      usage = body.usage || usage;
-      servedMode = body.mode || servedMode;
+      // Small batches show progress and keep each request short; all of them land in one input/caseN folder.
+      let caseName = "";
+      state.progress = { done: 0, total: selected.length };
+      renderFiles();
+      for (let start = 0; start < selected.length; start += UPLOAD_BATCH) {
+        const form = new FormData();
+        form.append("mode", mode);
+        if (caseName) form.append("case", caseName);
+        selected.slice(start, start + UPLOAD_BATCH).forEach((item) => form.append("files", item.file, item.file.name));
+        const response = await fetch(`${apiBase()}/api/extract/batch`, {
+          method: "POST",
+          headers: llmHeaders(),
+          body: form,
+        });
+        await ensureOk(response);
+        const body = await response.json();
+        caseName = body.case || caseName;
+        results.push(...(body.results || []));
+        elapsed += Number(body.elapsed_seconds) || 0;
+        usage = addUsage(usage, body.usage);
+        servedMode = body.mode || servedMode;
+        state.progress.done = Math.min(selected.length, start + UPLOAD_BATCH);
+        renderFiles();
+      }
       state.files = [];
     }
     state.submissions.push({
@@ -518,15 +729,41 @@ async function submitFiles() {
       elapsed,
       perFile: results.length ? elapsed / results.length : 0,
     });
-  } catch {
-    state.notice = { key: "apiError" };
+  } catch (error) {
+    state.notice = error && error.notice ? error.notice : { key: "apiError" };
   } finally {
     state.busy = false;
+    state.progress = null;
     renderNotice();
     renderFiles();
     renderOutputs();
-    loadInputCases();
+    if (!state.hosted) loadInputCases();
   }
+}
+
+function addUsage(total, extra) {
+  if (!extra) return total;
+  if (!total) return { ...extra };
+  const sum = { ...total };
+  ["prompt_tokens", "completion_tokens", "calls", "failures"].forEach((key) => {
+    sum[key] = (Number(total[key]) || 0) + (Number(extra[key]) || 0);
+  });
+  return sum;
+}
+
+async function ensureOk(response) {
+  if (response.ok) return;
+  let detail = "";
+  try {
+    detail = (await response.json()).detail;
+  } catch {
+    detail = "";
+  }
+  const error = new Error(String(response.status));
+  if (detail === "llm_key_missing") error.notice = { key: "bielikKeyMissing" };
+  else if (detail === "llm_key_rejected") error.notice = { key: "bielikKeyRejected" };
+  else if (typeof detail === "string" && detail) error.notice = { text: detail };
+  throw error;
 }
 
 function renderOutputs() {
@@ -567,7 +804,9 @@ function renderOutputs() {
       const completion = Number(usage.completion_tokens) || 0;
       const calls = Number(usage.calls) || 0;
       const label = latest.servedMode === "bielik_only" ? t("modeBielikOnly") : t("bielikUsed");
-      note.textContent = `${label} · ${t("tokens")} ${prompt + completion} (${t("promptTokens")} ${prompt}, ${t("completionTokens")} ${completion}) · ${t("llmCalls")} ${calls}`;
+      const failures = Number(usage.failures) || 0;
+      const failed = failures ? ` (${t("llmFailures").replace("{count}", failures)})` : "";
+      note.textContent = `${label} · ${t("tokens")} ${prompt + completion} (${t("promptTokens")} ${prompt}, ${t("completionTokens")} ${completion}) · ${t("llmCalls")} ${calls}${failed}`;
       summary.append(note);
     } else if (latest.mode === "bielik" || latest.mode === "bielik_only") {
       note.className = "placeholder";
@@ -582,7 +821,7 @@ function renderOutputs() {
   } else {
     latest.results
       .filter((item) => item.status !== "rejected")
-      .forEach((item) => detail.append(renderResult(item)));
+      .forEach((item, index, shown) => detail.append(renderResult(item, shown.length <= 5 || index === 0)));
   }
 
   resultsBody.replaceChildren();
@@ -608,6 +847,7 @@ function renderOutputs() {
     pill.textContent = t("statuses")[item.status] || item.status;
     statusCell.append(pill);
     row.append(fileCell, typeCell, statusCell);
+    resultsBody.append(row);
   });
 }
 
@@ -671,22 +911,27 @@ function ocrBadge(item) {
   return badge;
 }
 
-function renderResult(item) {
+function renderResult(item, open = true) {
   const article = document.createElement("details");
   article.className = "result";
-  article.open = true;
+  article.open = open;
   const heading = document.createElement("summary");
   const sizeLabel = Number.isFinite(item.size) ? ` · ${formatSize(item.size)}` : "";
   heading.textContent = `${item.filename}${sizeLabel} — ${typeLabel(item.document_type)}`;
   const badge = ocrBadge(item);
   if (badge) heading.append(badge);
-  if (item.status === "unrecognized" || item.status === "error") heading.append(uncertainMark());
+  if (item.status !== "ok") heading.append(uncertainMark());
   article.append(heading);
 
   if (item.status === "unrecognized") {
     const note = document.createElement("p");
     note.className = "placeholder";
     note.textContent = t("unrecognized");
+    article.append(note);
+  } else if (item.status === "needs_ocr") {
+    const note = document.createElement("p");
+    note.className = "message";
+    note.textContent = t("needsOcr");
     article.append(note);
   } else if (item.status === "error") {
     const note = document.createElement("p");
@@ -857,7 +1102,9 @@ function resetAll() {
 }
 
 applyCopy();
-loadInputCases();
+selectMode(state.mode);
+loadServerInfo();
+loadSamples();
 
 async function fileByteSize(file) {
   if (file.size > 0) return file.size;

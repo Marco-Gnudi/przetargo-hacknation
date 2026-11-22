@@ -1,4 +1,4 @@
-"""OpenAI-compatible client for the Bielik endpoint in backend/.env."""
+"""OpenAI-compatible client for the LLM endpoint (Mistral Small 3.2 on Scaleway by default)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AuthenticationError, NotFoundError, OpenAI, PermissionDeniedError
 
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 MAX_TEXT_CHARS = 12_000
@@ -33,22 +33,69 @@ logger = logging.getLogger("odwolania.llm")
 _VISION_SLOTS = threading.Semaphore(4)
 _VISION_TIMEOUT = 30.0
 
+
+class LLMAuthError(RuntimeError):
+    """The endpoint refused the key or the model. Retrying the next document will not help."""
+
+
 _RUN_USAGE: ContextVar[dict[str, int] | None] = ContextVar("llm_run_usage", default=None)
 _TOTAL_LOCK = threading.Lock()
-_TOTAL_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
+_TOTAL_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "seconds": 0.0, "failures": 0}
 _SKIP_CACHE: ContextVar[bool] = ContextVar("llm_skip_cache", default=False)
 _DOCUMENT: ContextVar[str] = ContextVar("llm_document", default="")
+_CREDENTIALS: ContextVar[dict[str, str] | None] = ContextVar("llm_credentials", default=None)
+_SETTINGS = ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL")
+# Scaleway Generative APIs serve this Apache 2.0 model from Paris (EU).
+DEFAULT_BASE_URL = "https://api.scaleway.ai/v1"
+DEFAULT_MODEL = "mistral-small-3.2-24b-instruct-2506"
+_ALIASES = {
+    "LLM_API_KEY": "MISTRAL_API_KEY",
+    "LLM_BASE_URL": "MISTRAL_BASE_URL",
+    "LLM_MODEL": "MISTRAL_MODEL",
+}
+_DEFAULTS = {"LLM_BASE_URL": DEFAULT_BASE_URL, "LLM_MODEL": DEFAULT_MODEL}
+
+
+def set_llm_credentials(api_key: str = "", base_url: str = "", model: str = "") -> None:
+    """Per-request settings sent by the browser. Empty values fall back to backend/.env."""
+    supplied = {
+        "LLM_API_KEY": (api_key or "").strip(),
+        "LLM_BASE_URL": (base_url or "").strip(),
+        "LLM_MODEL": (model or "").strip(),
+    }
+    _CREDENTIALS.set({name: value for name, value in supplied.items() if value} or None)
+
+
+def llm_setting(name: str) -> str:
+    """Request value, then LLM_*, then MISTRAL_*, then the built-in default."""
+    load_env()
+    supplied = _CREDENTIALS.get() or {}
+    return (
+        supplied.get(name)
+        or os.environ.get(name)
+        or os.environ.get(_ALIASES.get(name, ""), "")
+        or _DEFAULTS.get(name, "")
+    )
+
+
+def llm_configured() -> bool:
+    return all(llm_setting(name) for name in _SETTINGS)
+
+
+def server_key_configured() -> bool:
+    load_env()
+    return bool(os.environ.get("LLM_API_KEY") or os.environ.get("MISTRAL_API_KEY"))
 
 
 def start_usage() -> None:
     """Begin a fresh token total for this request."""
-    _RUN_USAGE.set({"prompt_tokens": 0, "completion_tokens": 0, "calls": 0})
+    _RUN_USAGE.set({"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "failures": 0})
 
 
 def reset_total_usage() -> None:
     """Zero the process-wide total. Worker threads all add into this one."""
     with _TOTAL_LOCK:
-        _TOTAL_USAGE.update(prompt_tokens=0, completion_tokens=0, calls=0)
+        _TOTAL_USAGE.update(prompt_tokens=0, completion_tokens=0, calls=0, seconds=0.0, failures=0)
 
 
 def total_usage() -> dict[str, int]:
@@ -60,11 +107,12 @@ def current_usage() -> dict[str, int]:
     """Tokens and call count recorded since start_usage."""
     usage = _RUN_USAGE.get()
     if not usage:
-        return {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
+        return {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "failures": 0}
     return {
         "prompt_tokens": usage["prompt_tokens"],
         "completion_tokens": usage["completion_tokens"],
         "calls": usage.get("calls", 0),
+        "failures": usage.get("failures", 0),
     }
 
 
@@ -75,6 +123,11 @@ def set_skip_cache(enabled: bool) -> None:
 
 def cache_skipped() -> bool:
     return bool(_SKIP_CACHE.get())
+
+
+def hosted() -> bool:
+    """Public deployment: no shared disk caches, no input/output folders."""
+    return os.environ.get("PRZETARGO_HOSTED", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def set_llm_document(name: str) -> None:
@@ -111,21 +164,24 @@ class LLMClient:
             self.model = model or "test"
             return
 
-        load_env()
-        missing = [
-            name
-            for name in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL")
-            if not os.environ.get(name)
-        ]
+        missing = [name for name in _SETTINGS if not llm_setting(name)]
         if missing:
             raise RuntimeError(
                 "Missing environment variable(s): " + ", ".join(missing)
             )
-        self.model = model or os.environ["LLM_MODEL"]
+        self.model = model or llm_setting("LLM_MODEL")
         self._client = OpenAI(
-            base_url=os.environ["LLM_BASE_URL"],
-            api_key=os.environ["LLM_API_KEY"],
+            base_url=llm_setting("LLM_BASE_URL"),
+            api_key=llm_setting("LLM_API_KEY"),
             timeout=120,
+        )
+
+    def ping(self) -> None:
+        """One tiny completion. Raises when the key, URL or model is rejected."""
+        self._client.chat.completions.create(
+            model=self.model,
+            max_tokens=1,
+            messages=[{"role": "user", "content": "OK"}],
         )
 
     def extract_vision(self, prompt: str, images: list[bytes]) -> dict:
@@ -154,7 +210,10 @@ class LLMClient:
     def _attempt(self, prompt: str, text: str, system: str) -> dict | None:
         try:
             parsed = parse_json_object(self._complete(prompt, text, system))
+        except (AuthenticationError, PermissionDeniedError, NotFoundError) as exc:
+            raise LLMAuthError(f"HTTP {exc.status_code}") from exc
         except Exception:
+            _record_failure()
             return None
         return parsed or None
 
@@ -177,10 +236,12 @@ class LLMClient:
                     time.sleep(delay)
                     delay = min(delay * 2, 16)
                     continue
+                _record_failure()
                 return None
             try:
                 return parse_json_object(raw) or None
             except Exception:
+                _record_failure()
                 return None
 
     def _complete(self, prompt: str, text: str, system: str = _JSON_ONLY) -> str:
@@ -210,7 +271,7 @@ class LLMClient:
                     continue
                 raise
         elapsed = time.perf_counter() - started
-        prompt_tokens, completion_tokens = _record_usage(response)
+        prompt_tokens, completion_tokens = _record_usage(response, elapsed)
         document = _DOCUMENT.get() or "-"
         logger.info(
             "LLM call document=%s prompt_tokens=%d completion_tokens=%d time=%.2fs",
@@ -228,7 +289,16 @@ def _rate_limited(exc: Exception) -> bool:
     return getattr(exc, "status_code", None) == 429
 
 
-def _record_usage(response: object) -> tuple[int, int]:
+def _record_failure() -> None:
+    """A request that errored or returned no JSON, so callers can say the model did not help."""
+    bucket = _RUN_USAGE.get()
+    if bucket is not None:
+        bucket["failures"] = int(bucket.get("failures", 0)) + 1
+    with _TOTAL_LOCK:
+        _TOTAL_USAGE["failures"] = int(_TOTAL_USAGE.get("failures", 0)) + 1
+
+
+def _record_usage(response: object, elapsed: float = 0.0) -> tuple[int, int]:
     usage = getattr(response, "usage", None)
     prompt = int(getattr(usage, "prompt_tokens", 0) or 0) if usage is not None else 0
     completion = int(getattr(usage, "completion_tokens", 0) or 0) if usage is not None else 0
@@ -243,6 +313,7 @@ def _record_usage(response: object) -> tuple[int, int]:
         _TOTAL_USAGE["prompt_tokens"] += prompt
         _TOTAL_USAGE["completion_tokens"] += completion
         _TOTAL_USAGE["calls"] += 1
+        _TOTAL_USAGE["seconds"] += elapsed
     return prompt, completion
 
 

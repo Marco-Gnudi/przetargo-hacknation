@@ -1,7 +1,6 @@
-"""HTTP interface for the existing deterministic extractor.
+"""HTTP interface and local web page for PrzetarGO.
 
-The CLI in main.py stays the evaluation entry point. This module only
-receives uploads, calls process_pdf, and deletes the temporary file.
+Extraction itself lives in engine.py, which the batch CLI (../main.py) also uses.
 """
 
 import json
@@ -13,18 +12,30 @@ import tempfile
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from urllib.parse import urlparse
+
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from pipeline import load_rules, process_pdf
-from llm_fill import extract_bielik_only, fill_with_bielik, review_marks, tag_rules
+from engine import LLM_MODES, MODES, RULES, envelope, extract_document
+from pipeline import process_pdf
+from pdf_reader import forget_pdf, ocr_available
+from odwolania.llm import (
+    LLMAuthError,
+    LLMClient,
+    hosted,
+    llm_configured,
+    server_key_configured,
+    set_llm_credentials,
+)
 
 MAX_BYTES = 20 * 1024 * 1024
-MAX_FILES = 30
+# The evaluation set is 150 documents; the page uploads them in batches of 10 into one case.
+MAX_FILES = 150
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = REPO_ROOT / "front-end"
 DATASET = REPO_ROOT / "UZP-hacknation-task" / "dane"
@@ -32,7 +43,7 @@ INPUT_ROOT = REPO_ROOT / "input"
 OUTPUT_ROOT = REPO_ROOT / "output"
 CASE_NAME = re.compile(r"^przyklad_\d{2}$")
 CASE_DIR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
-RULES = load_rules()
+SCAN_GROUPS = ("odwolania", "pelnomocnictwa", "potwierdzenia")
 
 def _show_llm_calls() -> None:
     log = logging.getLogger("odwolania.llm")
@@ -64,10 +75,98 @@ app.add_middleware(
 app.add_middleware(PrivateNetworkMiddleware)
 
 
+@app.exception_handler(LLMAuthError)
+def llm_auth_failed(request: Request, exc: LLMAuthError):
+    return JSONResponse(status_code=401, content={"detail": "llm_key_rejected", "reason": str(exc)})
+
+
 @app.get("/api/health")
 def health():
-    engine = "deterministic+bielik" if _bielik_configured() else "deterministic"
-    return {"status": "ok", "engine": engine}
+    engine = "deterministic+mistral" if llm_configured() else "deterministic"
+    return {
+        "status": "ok",
+        "engine": engine,
+        "hosted": hosted(),
+        "server_key": server_key_configured(),
+        "ocr": ocr_available(),
+    }
+
+
+@app.post("/api/llm/check")
+def check_llm(request: Request):
+    """Try the key the browser sent with one tiny completion."""
+    _use_request_llm(request)
+    if not llm_configured():
+        return {"ok": False, "error": "No Mistral API key."}
+    try:
+        client = LLMClient()
+        client.ping()
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        if status:
+            return {"ok": False, "error": f"The API rejected the request (HTTP {status}). Check the key and model."}
+        return {"ok": False, "error": f"Could not reach the API endpoint ({type(exc).__name__})."}
+    return {"ok": True, "model": client.model}
+
+
+@app.get("/api/samples")
+def list_samples():
+    """Example cases from the task data, so visitors can try the app without their own PDFs."""
+    samples = []
+    if not DATASET.is_dir():
+        return {"samples": samples}
+    for folder in sorted(path for path in DATASET.iterdir() if CASE_NAME.fullmatch(path.name)):
+        files = [_sample_entry(pdf, pdf.name) for pdf in sorted(folder.glob("*.pdf"))]
+        if files:
+            samples.append({"id": folder.name, "kind": "text", "files": files})
+    scans = DATASET / "skany"
+    numbers = sorted({path.name for group in SCAN_GROUPS for path in (scans / group).glob("[0-9]*") if path.is_dir()})
+    for number in numbers:
+        # Every scan is named <number>.pdf, so the group goes into the visible name.
+        files = [
+            _sample_entry(pdf, f"{group}_{pdf.name}")
+            for group in SCAN_GROUPS
+            for pdf in sorted((scans / group / number).glob("*.pdf"))
+        ]
+        if files:
+            samples.append({"id": f"skany_{number}", "kind": "scan", "files": files})
+    return {"samples": samples}
+
+
+@app.get("/api/samples/file")
+def sample_file(path: str):
+    target = (DATASET / path).resolve()
+    if not target.is_relative_to(DATASET.resolve()) or target.suffix.lower() != ".pdf" or not target.is_file():
+        raise HTTPException(status_code=404, detail="Unknown file.")
+    return FileResponse(target, media_type="application/pdf", filename=target.name)
+
+
+def _sample_entry(path: Path, name: str) -> dict:
+    return {"path": path.relative_to(DATASET).as_posix(), "name": name}
+
+
+def _use_request_llm(request: Request) -> None:
+    """Read the Mistral settings sent with this request. They are never logged or stored."""
+    base_url = request.headers.get("x-llm-base-url", "")
+    if base_url and hosted():
+        parsed = urlparse(base_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise HTTPException(status_code=400, detail="The API base URL must start with https://")
+    set_llm_credentials(
+        request.headers.get("x-llm-key", ""),
+        base_url,
+        request.headers.get("x-llm-model", ""),
+    )
+
+
+def _require_llm(mode: str) -> None:
+    if mode in LLM_MODES and not llm_configured():
+        raise HTTPException(status_code=400, detail="llm_key_missing")
+
+
+def _require_local() -> None:
+    if hosted():
+        raise HTTPException(status_code=404, detail="Not available on the hosted site.")
 
 
 @app.post("/api/extract")
@@ -91,34 +190,48 @@ def extract_example(body: ExampleRequest):
         try:
             payload, diagnostic = process_pdf(pdf, RULES)
             diagnostic["file"] = pdf.name
-            item = _envelope(pdf.name, payload, diagnostic, None)
+            item = envelope(pdf.name, payload, diagnostic, None)
         except Exception:
-            item = _envelope(pdf.name, {}, None, "The PDF could not be read.")
+            item = envelope(pdf.name, {}, None, "The PDF could not be read.")
         item["size"] = pdf.stat().st_size
         results.append(item)
     return {"results": results, "case": body.case}
 
 
+# A plain def runs in the thread pool, so one long Mistral batch does not block the others.
 @app.post("/api/extract/batch")
-async def extract_batch(
+def extract_batch(
+    request: Request,
     files: list[UploadFile] = File(...),
     mode: str = Form("regular"),
+    case: str = Form(""),
     nocache: str = Form("0"),
     nocache_query: str = Query("", alias="nocache"),
 ):
-    if mode not in ("regular", "bielik", "bielik_only"):
+    if mode not in MODES:
         raise HTTPException(status_code=400, detail="mode must be regular, bielik, or bielik_only")
     from odwolania.llm import current_usage, set_skip_cache, start_usage
 
+    _use_request_llm(request)
+    _require_llm(mode)
     start_usage()
     set_skip_cache(_enabled(nocache) or _enabled(nocache_query))
     started = time.perf_counter()
     selected = files[:MAX_FILES]
-    case = _next_case_name()
-    case_dir = INPUT_ROOT / case
+    if hosted():
+        case = None
+    elif not re.fullmatch(r"case\d{1,6}", case):
+        case = _next_case_name()
     results = []
     for upload in selected:
-        results.append(await _save_and_process(upload, mode, case_dir, case))
+        filename = Path(upload.filename or "document.pdf").name
+        data = upload.file.read()
+        if case is None:
+            item = _process_bytes(filename, data, mode)
+            item["size"] = len(data)
+        else:
+            item = _save_and_process(filename, data, mode, INPUT_ROOT / case, case)
+        results.append(item)
     elapsed = time.perf_counter() - started
     count = len(results)
     return {
@@ -139,6 +252,8 @@ class InputRequest(BaseModel):
 
 @app.get("/api/input")
 def list_input():
+    if hosted():
+        return {"cases": []}
     INPUT_ROOT.mkdir(parents=True, exist_ok=True)
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     cases = []
@@ -153,6 +268,7 @@ def list_input():
 @app.delete("/api/input")
 def delete_input():
     """Remove case files from input/. The output folder is not touched."""
+    _require_local()
     removed = []
     if INPUT_ROOT.is_dir():
         root = INPUT_ROOT.resolve()
@@ -171,11 +287,14 @@ def delete_input():
 
 
 @app.post("/api/extract/input")
-def extract_input(body: InputRequest):
-    if body.mode not in ("regular", "bielik", "bielik_only"):
+def extract_input(body: InputRequest, request: Request):
+    _require_local()
+    if body.mode not in MODES:
         raise HTTPException(status_code=400, detail="mode must be regular, bielik, or bielik_only")
     from odwolania.llm import current_usage, set_skip_cache, start_usage
 
+    _use_request_llm(request)
+    _require_llm(body.mode)
     start_usage()
     set_skip_cache(False)
     started = time.perf_counter()
@@ -189,7 +308,7 @@ def extract_input(body: InputRequest):
             if seen >= MAX_FILES:
                 break
             seen += 1
-            item = _extract_path(pdf, pdf.name, body.mode)
+            item = extract_document(pdf, pdf.name, body.mode)
             item["size"] = pdf.stat().st_size
             item["output"] = _write_output(folder.name, pdf.name, item["result"])
             results.append(item)
@@ -207,15 +326,6 @@ def extract_input(body: InputRequest):
     }
 
 
-def _bielik_configured() -> bool:
-    import os
-
-    from odwolania.llm import load_env
-
-    load_env()
-    return all(os.environ.get(name) for name in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL"))
-
-
 def _enabled(value: str) -> bool:
     return value.strip().lower() in ("1", "true", "yes", "on")
 
@@ -226,16 +336,19 @@ async def _process_upload(upload: UploadFile, mode: str = "regular"):
     return _process_bytes(filename, data, mode)
 
 
-async def _save_and_process(upload: UploadFile, mode: str, case_dir: Path, case: str):
-    filename = Path(upload.filename or "document.pdf").name
-    data = await upload.read()
+def _save_and_process(filename: str, data: bytes, mode: str, case_dir: Path, case: str):
     rejected = pdf_rejection(filename, data)
     if rejected or not data or len(data) > MAX_BYTES:
         return _process_bytes(filename, data, mode)
     case_dir.mkdir(parents=True, exist_ok=True)
     destination = case_dir / filename
+    copy = 2
+    while destination.exists():
+        destination = case_dir / f"{Path(filename).stem}_{copy}{Path(filename).suffix}"
+        copy += 1
+    filename = destination.name
     destination.write_bytes(data)
-    item = _extract_path(destination, filename, mode)
+    item = extract_document(destination, filename, mode)
     item["size"] = len(data)
     item["output"] = _write_output(case, filename, item["result"])
     return item
@@ -247,71 +360,22 @@ def _process_bytes(filename: str, data: bytes, mode: str):
     set_llm_document(filename)
     rejected = pdf_rejection(filename, data)
     if rejected:
-        return _envelope(filename, {}, None, rejected, status="rejected")
+        return envelope(filename, {}, None, rejected, status="rejected")
     if not data:
-        return _envelope(filename, {}, None, "The file is empty.")
+        return envelope(filename, {}, None, "The file is empty.")
     if len(data) > MAX_BYTES:
-        return _envelope(filename, {}, None, "The file is larger than 20 MB.")
+        return envelope(filename, {}, None, "The file is larger than 20 MB.")
     handle, path = tempfile.mkstemp(suffix=".pdf")
     try:
         with os.fdopen(handle, "wb") as stored:
             stored.write(data)
-        return _extract_path(Path(path), filename, mode)
+        return extract_document(Path(path), filename, mode)
     finally:
+        forget_pdf(path)
         try:
             os.unlink(path)
         except OSError:
             pass
-
-
-def _extract_path(path: Path, filename: str, mode: str):
-    from odwolania.llm import set_llm_document
-
-    set_llm_document(filename)
-    try:
-        if mode == "bielik_only":
-            from pdf_reader import read_pdf
-
-            document = read_pdf(path)
-            payload, document_type, sources, raw = extract_bielik_only(path)
-            diagnostic = {
-                "document_type": document_type,
-                "warnings": [],
-                "file": filename,
-                "text_source": document.text_source,
-                "ocr_seconds": document.ocr_seconds,
-            }
-            item = _envelope(filename, payload, diagnostic, None)
-            item["sources"] = sources
-            item["raw"] = raw
-            return item
-        payload, diagnostic = process_pdf(path, RULES)
-        diagnostic["file"] = filename
-        sources = tag_rules(payload)
-        raw = payload
-        bielik: dict = {}
-        if mode == "bielik":
-            try:
-                payload, document_type, sources, bielik, raw = fill_with_bielik(
-                    path, payload, diagnostic["document_type"]
-                )
-                diagnostic = dict(diagnostic)
-                diagnostic["document_type"] = document_type
-            except Exception:
-                diagnostic = dict(diagnostic)
-                diagnostic["warnings"] = list(diagnostic.get("warnings") or []) + [
-                    "Bielik fill failed; deterministic values were kept."
-                ]
-                raw = payload
-                bielik = {}
-        item = _envelope(filename, payload, diagnostic, None)
-        item["sources"] = sources
-        item["raw"] = raw
-        if mode == "bielik":
-            item["review"] = review_marks(payload, sources, bielik)
-        return item
-    except Exception:
-        return _envelope(filename, {}, None, "The PDF could not be read.")
 
 
 def _case_dir(name: str) -> Path | None:
@@ -348,27 +412,6 @@ def pdf_rejection(filename: str, data: bytes) -> str | None:
     return f"Rejected: {name} – not a PDF"
 
 
-def _envelope(filename, payload, diagnostic, error, status=None):
-    document_type = diagnostic["document_type"] if diagnostic else "unknown"
-    if status is None:
-        if error:
-            status = "error"
-        elif document_type == "unknown":
-            status = "unrecognized"
-        else:
-            status = "ok"
-    return {
-        "filename": filename,
-        "document_type": document_type,
-        "status": status,
-        "result": payload if isinstance(payload, dict) else {},
-        "warnings": list(diagnostic["warnings"]) if diagnostic else [],
-        "error": error,
-        "text_source": diagnostic.get("text_source") if diagnostic else None,
-        "ocr_seconds": diagnostic.get("ocr_seconds") if diagnostic else None,
-    }
-
-
 @app.get("/api/sample/{case}/{filename}")
 def sample_pdf(case: str, filename: str):
     if not CASE_NAME.fullmatch(case) or Path(filename).name != filename or not filename.lower().endswith(".pdf"):
@@ -385,4 +428,4 @@ app.mount("/", StaticFiles(directory=FRONTEND, html=True), name="frontend")
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("PORT", "8000")))
+    uvicorn.run(app, host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")))
