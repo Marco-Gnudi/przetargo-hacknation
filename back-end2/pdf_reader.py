@@ -26,6 +26,9 @@ _PAGE_TIMEOUT_SECONDS = 90
 _ENV_PATH = Path(__file__).resolve().parents[1] / "backend" / ".env"
 _LOCAL_TESSDATA = Path(__file__).resolve().parent / "models" / "tessdata"
 _CACHE: dict[tuple, PdfDocument] = {}
+# Each Tesseract process otherwise starts one OpenMP thread per core. With several documents in
+# parallel they starve each other until pages hit the timeout and come back empty.
+os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 
 
 @dataclass
