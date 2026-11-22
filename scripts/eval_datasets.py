@@ -300,8 +300,10 @@ def _draw(payload: dict) -> None:
     for spine in axis.spines.values():
         spine.set_visible(False)
     axis.tick_params(axis="y", length=0, pad=6)
-    axis.legend(frameon=False, fontsize=16, loc="lower right")
-    figure.subplots_adjust(left=0.36, right=0.98, top=0.98, bottom=0.03)
+    axis.legend(
+        frameon=False, fontsize=16, loc="lower left", bbox_to_anchor=(0.0, 1.02), ncol=2, borderaxespad=0,
+    )
+    figure.subplots_adjust(left=0.36, right=0.98, top=0.90, bottom=0.04)
     SLIDE.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(SLIDE, dpi=120, facecolor="white")
     plt.close(figure)
