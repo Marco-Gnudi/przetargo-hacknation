@@ -111,7 +111,7 @@ def test_extract_json_adds_provider_token_counts():
     start_usage()
     assert client.extract_json("pola", "jeden") == {"ok": True}
     assert client.extract_json("pola", "dwa") == {"ok": False}
-    assert current_usage() == {"prompt_tokens": 40, "completion_tokens": 10, "calls": 2}
+    assert current_usage() == {"prompt_tokens": 40, "completion_tokens": 10, "calls": 2, "failures": 0}
 
 
 def test_llm_call_log_names_the_document_and_tokens(caplog):

@@ -1,7 +1,6 @@
-"""HTTP interface for the existing deterministic extractor.
+"""HTTP interface and local web page for PrzetarGO.
 
-The CLI in main.py stays the evaluation entry point. This module only
-receives uploads, calls process_pdf, and deletes the temporary file.
+Extraction itself lives in engine.py, which the batch CLI (../main.py) also uses.
 """
 
 import json
@@ -22,9 +21,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from pipeline import load_rules, process_pdf
-from pdf_reader import forget_pdf
-from llm_fill import extract_bielik_only, fill_with_bielik, review_marks, tag_rules
+from engine import LLM_MODES, MODES, RULES, envelope, extract_document
+from pipeline import process_pdf
+from pdf_reader import forget_pdf, ocr_available
 from odwolania.llm import (
     LLMAuthError,
     LLMClient,
@@ -44,8 +43,6 @@ OUTPUT_ROOT = REPO_ROOT / "output"
 CASE_NAME = re.compile(r"^przyklad_\d{2}$")
 CASE_DIR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 SCAN_GROUPS = ("odwolania", "pelnomocnictwa", "potwierdzenia")
-BIELIK_MODES = ("bielik", "bielik_only")
-RULES = load_rules()
 
 def _show_llm_calls() -> None:
     log = logging.getLogger("odwolania.llm")
@@ -79,17 +76,18 @@ app.add_middleware(PrivateNetworkMiddleware)
 
 @app.exception_handler(LLMAuthError)
 def llm_auth_failed(request: Request, exc: LLMAuthError):
-    return JSONResponse(status_code=401, content={"detail": "bielik_key_rejected", "reason": str(exc)})
+    return JSONResponse(status_code=401, content={"detail": "llm_key_rejected", "reason": str(exc)})
 
 
 @app.get("/api/health")
 def health():
-    engine = "deterministic+bielik" if _bielik_configured() else "deterministic"
+    engine = "deterministic+mistral" if llm_configured() else "deterministic"
     return {
         "status": "ok",
         "engine": engine,
         "hosted": hosted(),
         "server_key": server_key_configured(),
+        "ocr": ocr_available(),
     }
 
 
@@ -98,14 +96,16 @@ def check_llm(request: Request):
     """Try the key the browser sent with one tiny completion."""
     _use_request_llm(request)
     if not llm_configured():
-        return {"ok": False, "error": "No Bielik API key."}
+        return {"ok": False, "error": "No Mistral API key."}
     try:
-        LLMClient().ping()
+        client = LLMClient()
+        client.ping()
     except Exception as exc:
         status = getattr(exc, "status_code", None)
-        reason = f"HTTP {status}" if status else type(exc).__name__
-        return {"ok": False, "error": f"Bielik rejected the request ({reason})."}
-    return {"ok": True}
+        if status:
+            return {"ok": False, "error": f"The API rejected the request (HTTP {status}). Check the key and model."}
+        return {"ok": False, "error": f"Could not reach the API endpoint ({type(exc).__name__})."}
+    return {"ok": True, "model": client.model}
 
 
 @app.get("/api/samples")
@@ -145,12 +145,12 @@ def _sample_entry(path: Path, name: str) -> dict:
 
 
 def _use_request_llm(request: Request) -> None:
-    """Read the visitor's Bielik settings from headers. They are never logged or stored."""
+    """Read the Mistral settings sent with this request. They are never logged or stored."""
     base_url = request.headers.get("x-llm-base-url", "")
     if base_url and hosted():
         parsed = urlparse(base_url)
         if parsed.scheme != "https" or not parsed.netloc:
-            raise HTTPException(status_code=400, detail="The Bielik base URL must start with https://")
+            raise HTTPException(status_code=400, detail="The API base URL must start with https://")
     set_llm_credentials(
         request.headers.get("x-llm-key", ""),
         base_url,
@@ -159,8 +159,8 @@ def _use_request_llm(request: Request) -> None:
 
 
 def _require_llm(mode: str) -> None:
-    if mode in BIELIK_MODES and not llm_configured():
-        raise HTTPException(status_code=400, detail="bielik_key_missing")
+    if mode in LLM_MODES and not llm_configured():
+        raise HTTPException(status_code=400, detail="llm_key_missing")
 
 
 def _require_local() -> None:
@@ -189,15 +189,15 @@ def extract_example(body: ExampleRequest):
         try:
             payload, diagnostic = process_pdf(pdf, RULES)
             diagnostic["file"] = pdf.name
-            item = _envelope(pdf.name, payload, diagnostic, None)
+            item = envelope(pdf.name, payload, diagnostic, None)
         except Exception:
-            item = _envelope(pdf.name, {}, None, "The PDF could not be read.")
+            item = envelope(pdf.name, {}, None, "The PDF could not be read.")
         item["size"] = pdf.stat().st_size
         results.append(item)
     return {"results": results, "case": body.case}
 
 
-# A plain def runs in the thread pool, so one visitor's long Bielik batch does not block the others.
+# A plain def runs in the thread pool, so one long Mistral batch does not block the others.
 @app.post("/api/extract/batch")
 def extract_batch(
     request: Request,
@@ -206,7 +206,7 @@ def extract_batch(
     nocache: str = Form("0"),
     nocache_query: str = Query("", alias="nocache"),
 ):
-    if mode not in ("regular", "bielik", "bielik_only"):
+    if mode not in MODES:
         raise HTTPException(status_code=400, detail="mode must be regular, bielik, or bielik_only")
     from odwolania.llm import current_usage, set_skip_cache, start_usage
 
@@ -284,7 +284,7 @@ def delete_input():
 @app.post("/api/extract/input")
 def extract_input(body: InputRequest, request: Request):
     _require_local()
-    if body.mode not in ("regular", "bielik", "bielik_only"):
+    if body.mode not in MODES:
         raise HTTPException(status_code=400, detail="mode must be regular, bielik, or bielik_only")
     from odwolania.llm import current_usage, set_skip_cache, start_usage
 
@@ -303,7 +303,7 @@ def extract_input(body: InputRequest, request: Request):
             if seen >= MAX_FILES:
                 break
             seen += 1
-            item = _extract_path(pdf, pdf.name, body.mode)
+            item = extract_document(pdf, pdf.name, body.mode)
             item["size"] = pdf.stat().st_size
             item["output"] = _write_output(folder.name, pdf.name, item["result"])
             results.append(item)
@@ -319,10 +319,6 @@ def extract_input(body: InputRequest, request: Request):
         "elapsed_seconds": round(elapsed, 3),
         "seconds_per_file": round(elapsed / count, 3) if count else 0.0,
     }
-
-
-def _bielik_configured() -> bool:
-    return llm_configured()
 
 
 def _enabled(value: str) -> bool:
@@ -342,7 +338,7 @@ def _save_and_process(filename: str, data: bytes, mode: str, case_dir: Path, cas
     case_dir.mkdir(parents=True, exist_ok=True)
     destination = case_dir / filename
     destination.write_bytes(data)
-    item = _extract_path(destination, filename, mode)
+    item = extract_document(destination, filename, mode)
     item["size"] = len(data)
     item["output"] = _write_output(case, filename, item["result"])
     return item
@@ -354,76 +350,22 @@ def _process_bytes(filename: str, data: bytes, mode: str):
     set_llm_document(filename)
     rejected = pdf_rejection(filename, data)
     if rejected:
-        return _envelope(filename, {}, None, rejected, status="rejected")
+        return envelope(filename, {}, None, rejected, status="rejected")
     if not data:
-        return _envelope(filename, {}, None, "The file is empty.")
+        return envelope(filename, {}, None, "The file is empty.")
     if len(data) > MAX_BYTES:
-        return _envelope(filename, {}, None, "The file is larger than 20 MB.")
+        return envelope(filename, {}, None, "The file is larger than 20 MB.")
     handle, path = tempfile.mkstemp(suffix=".pdf")
     try:
         with os.fdopen(handle, "wb") as stored:
             stored.write(data)
-        return _extract_path(Path(path), filename, mode)
+        return extract_document(Path(path), filename, mode)
     finally:
         forget_pdf(path)
         try:
             os.unlink(path)
         except OSError:
             pass
-
-
-def _extract_path(path: Path, filename: str, mode: str):
-    from odwolania.llm import set_llm_document
-
-    set_llm_document(filename)
-    try:
-        if mode == "bielik_only":
-            from pdf_reader import read_pdf
-
-            document = read_pdf(path)
-            payload, document_type, sources, raw = extract_bielik_only(path)
-            diagnostic = {
-                "document_type": document_type,
-                "warnings": [],
-                "file": filename,
-                "text_source": document.text_source,
-                "ocr_seconds": document.ocr_seconds,
-            }
-            item = _envelope(filename, payload, diagnostic, None)
-            item["sources"] = sources
-            item["raw"] = raw
-            return item
-        payload, diagnostic = process_pdf(path, RULES)
-        diagnostic["file"] = filename
-        sources = tag_rules(payload)
-        raw = payload
-        bielik: dict = {}
-        if mode == "bielik":
-            try:
-                payload, document_type, sources, bielik, raw = fill_with_bielik(
-                    path, payload, diagnostic["document_type"]
-                )
-                diagnostic = dict(diagnostic)
-                diagnostic["document_type"] = document_type
-            except LLMAuthError:
-                raise
-            except Exception:
-                diagnostic = dict(diagnostic)
-                diagnostic["warnings"] = list(diagnostic.get("warnings") or []) + [
-                    "Bielik fill failed; deterministic values were kept."
-                ]
-                raw = payload
-                bielik = {}
-        item = _envelope(filename, payload, diagnostic, None)
-        item["sources"] = sources
-        item["raw"] = raw
-        if mode == "bielik":
-            item["review"] = review_marks(payload, sources, bielik)
-        return item
-    except LLMAuthError:
-        raise
-    except Exception:
-        return _envelope(filename, {}, None, "The PDF could not be read.")
 
 
 def _case_dir(name: str) -> Path | None:
@@ -458,27 +400,6 @@ def pdf_rejection(filename: str, data: bytes) -> str | None:
     if name.lower().endswith(".pdf") and data.startswith(b"%PDF"):
         return None
     return f"Rejected: {name} – not a PDF"
-
-
-def _envelope(filename, payload, diagnostic, error, status=None):
-    document_type = diagnostic["document_type"] if diagnostic else "unknown"
-    if status is None:
-        if error:
-            status = "error"
-        elif document_type == "unknown":
-            status = "unrecognized"
-        else:
-            status = "ok"
-    return {
-        "filename": filename,
-        "document_type": document_type,
-        "status": status,
-        "result": payload if isinstance(payload, dict) else {},
-        "warnings": list(diagnostic["warnings"]) if diagnostic else [],
-        "error": error,
-        "text_source": diagnostic.get("text_source") if diagnostic else None,
-        "ocr_seconds": diagnostic.get("ocr_seconds") if diagnostic else None,
-    }
 
 
 @app.get("/api/sample/{case}/{filename}")

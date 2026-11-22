@@ -40,7 +40,7 @@ class LLMAuthError(RuntimeError):
 
 _RUN_USAGE: ContextVar[dict[str, int] | None] = ContextVar("llm_run_usage", default=None)
 _TOTAL_LOCK = threading.Lock()
-_TOTAL_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "seconds": 0.0}
+_TOTAL_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "seconds": 0.0, "failures": 0}
 _SKIP_CACHE: ContextVar[bool] = ContextVar("llm_skip_cache", default=False)
 _DOCUMENT: ContextVar[str] = ContextVar("llm_document", default="")
 _CREDENTIALS: ContextVar[dict[str, str] | None] = ContextVar("llm_credentials", default=None)
@@ -89,13 +89,13 @@ def server_key_configured() -> bool:
 
 def start_usage() -> None:
     """Begin a fresh token total for this request."""
-    _RUN_USAGE.set({"prompt_tokens": 0, "completion_tokens": 0, "calls": 0})
+    _RUN_USAGE.set({"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "failures": 0})
 
 
 def reset_total_usage() -> None:
     """Zero the process-wide total. Worker threads all add into this one."""
     with _TOTAL_LOCK:
-        _TOTAL_USAGE.update(prompt_tokens=0, completion_tokens=0, calls=0, seconds=0.0)
+        _TOTAL_USAGE.update(prompt_tokens=0, completion_tokens=0, calls=0, seconds=0.0, failures=0)
 
 
 def total_usage() -> dict[str, int]:
@@ -107,11 +107,12 @@ def current_usage() -> dict[str, int]:
     """Tokens and call count recorded since start_usage."""
     usage = _RUN_USAGE.get()
     if not usage:
-        return {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
+        return {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0, "failures": 0}
     return {
         "prompt_tokens": usage["prompt_tokens"],
         "completion_tokens": usage["completion_tokens"],
         "calls": usage.get("calls", 0),
+        "failures": usage.get("failures", 0),
     }
 
 
@@ -212,6 +213,7 @@ class LLMClient:
         except (AuthenticationError, PermissionDeniedError, NotFoundError) as exc:
             raise LLMAuthError(f"HTTP {exc.status_code}") from exc
         except Exception:
+            _record_failure()
             return None
         return parsed or None
 
@@ -234,10 +236,12 @@ class LLMClient:
                     time.sleep(delay)
                     delay = min(delay * 2, 16)
                     continue
+                _record_failure()
                 return None
             try:
                 return parse_json_object(raw) or None
             except Exception:
+                _record_failure()
                 return None
 
     def _complete(self, prompt: str, text: str, system: str = _JSON_ONLY) -> str:
@@ -283,6 +287,15 @@ def _rate_limited(exc: Exception) -> bool:
     if exc.__class__.__name__ == "RateLimitError":
         return True
     return getattr(exc, "status_code", None) == 429
+
+
+def _record_failure() -> None:
+    """A request that errored or returned no JSON, so callers can say the model did not help."""
+    bucket = _RUN_USAGE.get()
+    if bucket is not None:
+        bucket["failures"] = int(bucket.get("failures", 0)) + 1
+    with _TOTAL_LOCK:
+        _TOTAL_USAGE["failures"] = int(_TOTAL_USAGE.get("failures", 0)) + 1
 
 
 def _record_usage(response: object, elapsed: float = 0.0) -> tuple[int, int]:

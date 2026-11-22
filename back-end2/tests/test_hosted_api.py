@@ -35,7 +35,7 @@ class HostedApiTests(unittest.TestCase):
                 files={"files": (SAMPLE.name, handle, "application/pdf")},
             )
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["detail"], "bielik_key_missing")
+        self.assertEqual(response.json()["detail"], "llm_key_missing")
 
     def test_regular_batch_writes_nothing_to_disk(self):
         before = set(api.INPUT_ROOT.iterdir()) if api.INPUT_ROOT.is_dir() else set()
