@@ -4,6 +4,32 @@ Team project for HackNation 2026 in Bydgoszcz (21-22 Nov 2026).
 
 **Team:** Marco Gnudi, Wiktor
 
+## Quick start for judges
+
+1. Open Command Prompt and clone into a normal folder, then start the app. In PowerShell, run `.\start.bat` instead of `start.bat`.
+
+```bat
+cd %USERPROFILE%
+git clone https://github.com/Marco-Gnudi/przetargo-hacknation.git
+cd przetargo-hacknation
+start.bat
+```
+
+2. If port 8000 is busy, pick another port, start again, and open the address the script prints:
+
+```bat
+set PORT=8010
+start.bat
+```
+
+3. Put your own PDFs in `input\<case name>\`, one folder per case. Copy them in File Explorer, or from a second Command Prompt:
+
+```bat
+robocopy "<your folder>" input /E
+```
+
+4. On the page, press **Refresh**, then **Przetwórz dokumenty**. Results are in `output\<case name>\`.
+
 ## The challenge
 
 Odwołania2JSON, for the Public Procurement Office (UZP): read the PDFs in a KIO appeal case and write one JSON file per document in the official schema.
