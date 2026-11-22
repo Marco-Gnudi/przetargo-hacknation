@@ -290,7 +290,7 @@ def _summarise(rows: list[dict]) -> dict:
     return summary
 
 
-def _write_reports(mode: str, summary: dict, rows: list[dict]) -> tuple[Path, Path]:
+def _write_reports(mode: str, summary: dict, rows: list[dict]) -> tuple[Path, Path, Path]:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     folder = ROOT / "reports"
     folder.mkdir(parents=True, exist_ok=True)
@@ -300,6 +300,7 @@ def _write_reports(mode: str, summary: dict, rows: list[dict]) -> tuple[Path, Pa
     json_path = folder / f"eval_{mode}_{stamp}.json"
     csv_path = folder / f"eval_{mode}_{stamp}.csv"
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    stats_path = _write_stats(summary)
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=("file", "field", "expected", "got", "text_source"))
         writer.writeheader()
@@ -311,10 +312,10 @@ def _write_reports(mode: str, summary: dict, rows: list[dict]) -> tuple[Path, Pa
                 "got": "" if item["got"] is None else item["got"],
                 "text_source": item["text_source"],
             })
-    return json_path, csv_path
+    return json_path, csv_path, stats_path
 
 
-def _print(summary: dict, rows: list[dict], written: tuple[Path, Path]) -> None:
+def _print(summary: dict, rows: list[dict], written: tuple[Path, Path, Path]) -> None:
     usage = summary["tokens"]
     print(f"mode {summary['mode']}  cache {summary['cache']}  files {summary['overall']['n']}")
     print(
@@ -359,6 +360,32 @@ def _print(summary: dict, rows: list[dict], written: tuple[Path, Path]) -> None:
     print()
     print(f"wrote {written[0]}")
     print(f"wrote {written[1]}")
+    print(f"wrote {written[2]}")
+
+
+def _write_stats(summary: dict) -> Path:
+    """Headline scores for the pitch chart. Values come from this run's totals."""
+    overall = summary["overall"]
+    types = {}
+    for name in ("odwolanie", "pelnomocnictwo", "przelew"):
+        bucket = summary["types"].get(name)
+        if bucket is None:
+            continue
+        types[name] = {
+            "f1": bucket["f1"],
+            "precision": bucket["precision"],
+            "recall": bucket["recall"],
+            "documents": bucket["n"],
+        }
+    payload = {
+        "f1": overall["f1"],
+        "precision": overall["precision"],
+        "recall": overall["recall"],
+        "types": types,
+    }
+    path = ROOT / "reports" / "stats.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def _table(header: list[str], rows: list[list]) -> None:

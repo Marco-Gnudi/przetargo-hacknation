@@ -77,6 +77,42 @@ app.add_middleware(
 app.add_middleware(PrivateNetworkMiddleware)
 
 
+_STATS_LIVE = REPO_ROOT / "reports" / "stats.json"
+_STATS_FALLBACK = FRONTEND / "assets" / "stats" / "stats.json"
+_CHARTS_LIVE = REPO_ROOT / "reports" / "charts"
+_CHARTS_FALLBACK = FRONTEND / "assets" / "stats"
+_CHART_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}\.png$")
+
+
+def _prefer(live: Path, fallback: Path) -> Path | None:
+    if live.is_file():
+        return live
+    if fallback.is_file():
+        return fallback
+    return None
+
+
+@app.get("/api/stats")
+def stats():
+    path = _prefer(_STATS_LIVE, _STATS_FALLBACK)
+    if path is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Brak reports/stats.json. Uruchom ewaluację, aby go utworzyć.",
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@app.get("/api/charts/{name}")
+def chart(name: str):
+    if not _CHART_NAME.fullmatch(name):
+        raise HTTPException(status_code=404, detail="Nieznany wykres.")
+    path = _prefer(_CHARTS_LIVE / name, _CHARTS_FALLBACK / name)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Nieznany wykres.")
+    return FileResponse(path, media_type="image/png")
+
+
 @app.exception_handler(LLMAuthError)
 def llm_auth_failed(request: Request, exc: LLMAuthError):
     return JSONResponse(status_code=401, content={"detail": "llm_key_rejected", "reason": str(exc)})

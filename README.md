@@ -158,4 +158,4 @@ On Linux add `--user "$(id -u):$(id -g)"` so the output files belong to you.
 
 ### Developers
 
-Tests: `cd back-end2 && ../.venv/bin/python -m pytest` and `cd backend && ../.venv/bin/python -m pytest` (install `pytest` and `httpx` into `.venv` first). Score against the reference JSON: `cd back-end2 && ../.venv/bin/python benchmark.py`.
+Tests: `cd back-end2 && ../.venv/bin/python -m pytest` and `cd backend && ../.venv/bin/python -m pytest` (install `pytest` and `httpx` into `.venv` first). Score against the reference JSON: `cd back-end2 && ../.venv/bin/python benchmark.py`. The pitch slide is `docs/slides/f1_overview.png`; `python scripts/make_f1_chart.py` redraws it from `reports/stats.json`.
