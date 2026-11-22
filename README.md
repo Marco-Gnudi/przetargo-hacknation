@@ -1,4 +1,4 @@
-﻿# HackNation 2026
+﻿# PrzetarGO (przetargo-hacknation)
 
 Team project for HackNation 2026 in Bydgoszcz (21-22 Nov 2026).
 
@@ -32,6 +32,15 @@ PrzetarGO reads KIO appeal case PDFs (odwołanie, pełnomocnictwo, potwierdzenie
 - Tesseract OCR 5.x with Polish (`pol`) and English (`eng`) data, for scanned PDFs. Text PDFs work without it; see [Tesseract](#tesseract-for-scanned-pdfs).
 - About 1 GB free disk, 16 GB RAM is plenty, no GPU.
 - Optional: a Mistral API key, only for hybrid mode.
+
+### Get the code
+
+```bash
+git clone https://github.com/Marco-Gnudi/przetargo-hacknation.git
+cd przetargo-hacknation
+```
+
+Or download the ZIP from GitHub (**Code → Download ZIP**) and unpack it.
 
 ### Start the website (one command)
 
