@@ -1,6 +1,6 @@
 ﻿# PLAN (shared team notes)
 
-Single source of truth for the team: Marco, Wiktor, and our AI assistants.
+Single source of truth for the team: Marco and Wiktor.
 **Keep it short. Update it whenever a decision changes. Commit it straight to `main`.**
 
 ## Challenge

@@ -5,7 +5,8 @@ Team project for HackNation 2026 in Bydgoszcz (21-22 Nov 2026).
 **Team:** Marco Gnudi, Wiktor
 
 ## The challenge
-_To be filled in once the challenge is announced._
+
+Odwołania2JSON, for the Public Procurement Office (UZP): read the PDFs in a KIO appeal case and write one JSON file per document in the official schema.
 
 ## How we work
 - `main` must always be demo-ready.
@@ -24,16 +25,25 @@ gh pr create --fill
 
 ## For UZP Judges — Quick Start
 
-PrzetarGO reads KIO appeal case PDFs (odwołanie, pełnomocnictwo, potwierdzenie przelewu) and writes one JSON file per PDF in the official schema. Everything runs on your own computer: the web page and the batch command use the same extraction engine, and documents never leave the machine unless you turn on Mistral mode.
+PrzetarGO reads KIO appeal case PDFs (odwołanie, pełnomocnictwo, potwierdzenie przelewu) and writes one JSON file per PDF in the official schema. Everything runs on your own computer. Documents leave the machine only when you add a Mistral key: the page then sends the extracted text to the Mistral API.
 
-### What you need
+### 1. Install the two system tools, then run the setup script
 
-- Python 3.13 or newer.
-- Tesseract OCR 5.x with Polish (`pol`) and English (`eng`) data, for scanned PDFs. Text PDFs work without it; see [Tesseract](#tesseract-for-scanned-pdfs).
-- About 1 GB free disk, 16 GB RAM is plenty, no GPU.
-- Optional: a Mistral API key, only for hybrid mode.
+Install these yourself. The script does not install them.
 
-### Get the code
+**Python 3.13 or newer.**
+
+- macOS: `brew install python@3.13`
+- Ubuntu/Debian: `sudo apt install python3.13 python3.13-venv`
+- Windows: https://www.python.org/downloads/ (tick "Add python.exe to PATH"), or `winget install -e --id Python.Python.3.13`
+
+**Tesseract OCR 5, with Polish and English language data.** Text PDFs work without it. Scanned PDFs do not. Details are under [Tesseract](#tesseract-for-scanned-pdfs).
+
+- macOS: `brew install tesseract tesseract-lang`
+- Ubuntu/Debian: `sudo apt install tesseract-ocr tesseract-ocr-pol tesseract-ocr-eng`
+- Windows: the installer from https://github.com/UB-Mannheim/tesseract/wiki, with Polish and English selected. If `tesseract` is not on PATH, set `TESSERACT_CMD` in `backend/.env` to the full path of `tesseract.exe`.
+
+Get the project:
 
 ```bash
 git clone https://github.com/Marco-Gnudi/przetargo-hacknation.git
@@ -42,7 +52,49 @@ cd przetargo-hacknation
 
 Or download the ZIP from GitHub (**Code → Download ZIP**) and unpack it.
 
-### Start the website (one command)
+From that folder, run the setup script. The first run takes about a minute: it creates `.venv` and installs the Python packages from `requirements.txt`.
+
+macOS / Linux:
+
+```bash
+./start.sh doctor
+```
+
+Windows, in Command Prompt:
+
+```bat
+start.bat doctor
+```
+
+Those packages are:
+
+| Package | What it is for |
+| --- | --- |
+| pymupdf, pypdf, pdfplumber | Reading the PDFs |
+| pytesseract, pillow | Sending scanned pages to Tesseract |
+| PyYAML, python-dotenv | Settings |
+| openai | The Mistral API client |
+| fastapi, uvicorn, python-multipart | The website |
+
+The script then prints PASS or FAIL for Python, those packages, Tesseract, the Polish and English OCR data, and the `input/` and `output/` folders. Every required line should say PASS. The Mistral key line may say SKIP: the key is entered in the browser in step 3, not in a file. You need about 1 GB of free disk. 16 GB of RAM is plenty, and no GPU is required.
+
+### 2. Place the cases in the input folder
+
+Put each case in its own folder inside `input/`, in the project root. A PDF's result is a JSON file with the same name.
+
+```
+input/
+├── case1/
+│   ├── odwolanie_nr_1.pdf
+│   ├── pelnomocnictwo_nr_1.pdf
+│   └── przelew_nr_1.pdf
+└── case2/
+    └── odwolanie_nr_2.pdf
+```
+
+A folder name can be any mix of letters, digits, dots, underscores and hyphens, such as `case1`. The page processes every PDF it finds under `input/`.
+
+### 3. Start the website
 
 macOS / Linux:
 
@@ -50,20 +102,31 @@ macOS / Linux:
 ./start.sh
 ```
 
-Windows (double-click or run in `cmd`):
+Windows:
 
 ```bat
 start.bat
 ```
 
-The first run creates `.venv`, installs `requirements.txt` (about a minute) and checks your setup. Then open **http://127.0.0.1:8000/**. The server listens only on this computer (`127.0.0.1`). Press Ctrl+C to stop it. Use another port with `PORT=8010 ./start.sh` (Windows: `set PORT=8010` then `start.bat`).
+When the checks pass, open **http://127.0.0.1:8000/**. The server listens only on this computer. Leave the terminal window open; Ctrl+C stops it. For another port: `PORT=8010 ./start.sh` (Windows: `set PORT=8010` and then `start.bat`).
 
-On the page:
+Stay on **Zadanie Hacknation** (Hacknation Task):
 
-1. Choose **Regularne / Regular** (deterministic, no key) or **Mistral** (rules first, then the model fills gaps).
-2. For Mistral, paste the key and press **Sprawdź połączenie / Check connection**. The key stays in the tab's memory only: it is not saved in the browser, on disk or in logs, and it is sent only to the local server, which passes it to the model API.
-3. Add up to **150 PDFs** (drag and drop or click), or pick an example case. The page uploads them 10 at a time and shows the progress.
-4. Press **Przetwórz dokumenty / Process documents**. Each document shows its type, fields and missing values; you can copy or download its JSON. All files from one run are also saved as `input/caseN/*.pdf` and `output/caseN/*.json`.
+1. Paste the Mistral API key into **Klucz API Mistral** and press **Dodaj** (or Enter). The page checks the key. On success the box clears and shows "Klucz dodany" with the model name. The key stays in that browser tab only: it is not saved in the browser, on disk, or in logs, and it is sent only to the local server.
+2. The folder line shows how many cases and PDFs were found, for example "Dodano 2 spraw · 4 plików PDF". If you copied the files in while the page was open, press **Odśwież**.
+3. Press **Przetwórz dokumenty**. The summary lists each document as it finishes, then the time, the Mistral token count, how many documents were recognised, and how many were out of scope.
+
+The JSON files are in the project folder:
+
+```
+output/
+├── case1/
+│   ├── odwolanie_nr_1.json
+│   ├── pelnomocnictwo_nr_1.json
+│   └── przelew_nr_1.json
+└── case2/
+    └── odwolanie_nr_2.json
+```
 
 ### Run the full batch (no interaction)
 
@@ -90,7 +153,7 @@ Measured on a 4-core cloud VM without a GPU, deterministic mode, OCR cache clear
 | `main.py`, whole organizer dataset | 226 | 33 | 60 s |
 | Web page flow, 150 random files in batches of 10 | 150 | 20 | 112 s |
 
-A text PDF takes under 0.2 s, a scanned transfer confirmation about 1.5 s and a scanned appeal about 10 s of OCR. Hybrid mode adds Mistral requests only for fields the rules left empty and for weak scans; it was not timed because we had no key during testing. Even at several seconds per request, 150 documents stay well within 45 minutes. At Scaleway list prices (€0.15 per million input tokens, €0.35 per million output tokens) a 150-document run costs well under €1; this is an estimate, not a measurement.
+A text PDF takes under 0.2 s, a scanned transfer confirmation about 1.5 s and a scanned appeal about 10 s of OCR. Mistral-only mode, which is what the Hacknation Task page runs, took 55 seconds and about 144,000 tokens for 20 official cases (63 PDFs) on the same machine. At Scaleway list prices (€0.15 per million input tokens, €0.35 per million output tokens) a 150-document run costs well under €1.
 
 ### Deterministic mode (default)
 
