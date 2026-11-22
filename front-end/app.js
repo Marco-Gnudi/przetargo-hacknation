@@ -22,6 +22,9 @@ const inputFolder = document.querySelector("#input-folder");
 const ocrWarning = document.querySelector("#ocr-warning");
 const MAX_PDFS = 150;
 const VALID_TYPES = ["odwolanie", "pelnomocnictwo", "przelew"];
+// The Hacknation Task view has no mode switch. On 20 random cases Mistral alone scored
+// F1 0.995, ahead of Regular (0.984) and Regular + Mistral (0.982).
+const TASK_MODE = "bielik_only";
 
 const copy = {
   pl: {
@@ -32,6 +35,7 @@ const copy = {
     viewLabel: "Widok",
     viewTask: "Zadanie Hacknation",
     viewDrop: "Przeciągnij i upuść",
+    taskMode: "Zadanie Hacknation przetwarza dokumenty trybem Tylko Mistral.",
     refreshInput: "Odśwież",
     filesCount: "{count} plików PDF",
     rootCase: "input/ (pliki bez folderu sprawy)",
@@ -158,6 +162,7 @@ const copy = {
     viewLabel: "View",
     viewTask: "Hacknation Task",
     viewDrop: "Drag & Drop",
+    taskMode: "The Hacknation Task processes documents with Mistral only.",
     refreshInput: "Refresh",
     filesCount: "{count} PDF files",
     rootCase: "input/ (files outside a case folder)",
@@ -475,6 +480,9 @@ function selectView(view) {
   inputFolder.hidden = !task;
   dropzone.hidden = task;
   samplePicker.hidden = task || state.samples.length === 0;
+  document.querySelector(".mode-bar").hidden = task;
+  document.querySelector("#task-mode").hidden = !task;
+  bielikSettings.hidden = task ? state.serverKey || !needsBielik(TASK_MODE) : !needsBielik(state.mode);
   state.notice = null;
   renderNotice();
   renderFiles();
@@ -865,7 +873,7 @@ async function submitFiles() {
     ? selectedInputFiles().map((job) => ({ ...job, name: job.case === "." ? job.file : `${job.case}/${job.file}` }))
     : state.files.slice(0, MAX_PDFS).map((item) => ({ upload: item.file, name: item.file.name }));
   if (jobs.length === 0) return;
-  const mode = state.mode;
+  const mode = task ? TASK_MODE : state.mode;
   if (needsBielik(mode) && !bielikKey.value.trim() && !state.serverKey) {
     state.notice = { key: "bielikKeyMissing" };
     renderNotice();

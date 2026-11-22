@@ -216,6 +216,10 @@ a {
   color: var(--muted);
 }
 
+.mode-bar[hidden] {
+  display: none;
+}
+
 .mode-bar {
   display: flex;
   justify-content: space-between;
