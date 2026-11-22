@@ -1,4 +1,4 @@
-"""Score Bielik extraction of odwolanie and pelnomocnictwo against training JSON.
+"""Score Mistral extraction of odwolanie and pelnomocnictwo against training JSON.
 
 Run from backend/:
     python scripts/eval_llm.py --limit 5
@@ -27,7 +27,7 @@ _PDF = {"odwolanie": "odwolanie.pdf", "pelnomocnictwo": "pelnomocnictwo.pdf"}
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Evaluate Bielik JSON extraction.")
+    parser = argparse.ArgumentParser(description="Evaluate Mistral JSON extraction.")
     parser.add_argument("--limit", type=int, default=None, help="Only the first N cases")
     parser.add_argument("--type", choices=_TYPES, default=None, help="Only this document type")
     args = parser.parse_args(argv)
@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
         for doc_type in selected:
             pdf = case / _PDF[doc_type]
             expected = json.loads((case / f"{doc_type}.json").read_text(encoding="utf-8"))
-            processed = process_file(pdf, mode="bielik")
+            processed = process_file(pdf, mode="mistral")
             got = processed.data if processed.document_type == doc_type else {}
             print(f"{case_name} {doc_type}", flush=True)
             bucket = stats[doc_type]

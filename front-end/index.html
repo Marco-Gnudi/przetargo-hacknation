@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrzetarGO</title>
-    <link rel="stylesheet" href="styles.css?v=26" />
+    <link rel="stylesheet" href="styles.css?v=27" />
   </head>
   <body>
     <header class="site-header">
@@ -85,46 +85,46 @@
             <span data-i18n="modeRegular">Regularne</span>
             <span data-i18n="modeRegularHint">Bez modelu językowego</span>
           </button>
-          <button type="button" data-mode="bielik" aria-pressed="false">
-            <span data-i18n="modeBielik">Mistral</span>
-            <span data-i18n="modeBielikHint">Reguły, potem model</span>
+          <button type="button" data-mode="mistral" aria-pressed="false">
+            <span data-i18n="modeMistral">Mistral</span>
+            <span data-i18n="modeMistralHint">Reguły, potem model</span>
           </button>
-          <button type="button" data-mode="bielik_only" aria-pressed="false">
-            <span data-i18n="modeBielikOnly">Tylko Mistral</span>
-            <span data-i18n="modeBielikOnlyHint">Bez reguł, same wywołania modelu</span>
+          <button type="button" data-mode="mistral_only" aria-pressed="false">
+            <span data-i18n="modeMistralOnly">Tylko Mistral</span>
+            <span data-i18n="modeMistralOnlyHint">Bez reguł, same wywołania modelu</span>
           </button>
         </div>
       </section>
 
-      <section id="bielik-settings" class="bielik-settings card" aria-labelledby="bielik-key-label" hidden>
-        <div class="bielik-settings-head">
-          <h2 id="bielik-key-label" data-i18n="bielikKeyTitle">Klucz API Mistral</h2>
-          <p data-i18n="bielikKeyHint">Klucz jest tylko w pamięci tej karty i trafia wyłącznie do lokalnego serwera PrzetarGO. Nie jest nigdzie zapisywany.</p>
+      <section id="mistral-settings" class="mistral-settings card" aria-labelledby="mistral-key-label" hidden>
+        <div class="mistral-settings-head">
+          <h2 id="mistral-key-label" data-i18n="mistralKeyTitle">Klucz API Mistral</h2>
+          <p data-i18n="mistralKeyHint">Klucz jest tylko w pamięci tej karty i trafia wyłącznie do lokalnego serwera PrzetarGO. Nie jest nigdzie zapisywany.</p>
         </div>
         <div class="key-row">
           <input
-            id="bielik-key"
+            id="mistral-key"
             class="text-input"
             type="password"
             autocomplete="off"
             spellcheck="false"
             placeholder="MISTRAL_API_KEY"
-            data-i18n-aria="bielikKeyTitle"
+            data-i18n-aria="mistralKeyTitle"
           />
-          <button type="button" id="bielik-check" class="btn btn-ghost" data-i18n="bielikCheck">Sprawdź połączenie</button>
+          <button type="button" id="mistral-check" class="btn btn-ghost" data-i18n="mistralCheck">Sprawdź połączenie</button>
         </div>
-        <details class="bielik-advanced">
-          <summary data-i18n="bielikAdvanced">Ustawienia zaawansowane</summary>
+        <details class="mistral-advanced">
+          <summary data-i18n="mistralAdvanced">Ustawienia zaawansowane</summary>
           <label class="field">
-            <span data-i18n="bielikBaseUrl">Adres API (zgodny z OpenAI)</span>
-            <input id="bielik-base-url" class="text-input" type="url" spellcheck="false" placeholder="https://api.scaleway.ai/v1" />
+            <span data-i18n="mistralBaseUrl">Adres API (zgodny z OpenAI)</span>
+            <input id="mistral-base-url" class="text-input" type="url" spellcheck="false" placeholder="https://api.scaleway.ai/v1" />
           </label>
           <label class="field">
-            <span data-i18n="bielikModel">Model</span>
-            <input id="bielik-model" class="text-input" type="text" spellcheck="false" placeholder="mistral-small-3.2-24b-instruct-2506" />
+            <span data-i18n="mistralModel">Model</span>
+            <input id="mistral-model" class="text-input" type="text" spellcheck="false" placeholder="mistral-small-3.2-24b-instruct-2506" />
           </label>
         </details>
-        <p id="bielik-status" class="key-status" role="status"></p>
+        <p id="mistral-status" class="key-status" role="status"></p>
       </section>
 
       <section class="workspace">
@@ -211,6 +211,6 @@
     <footer class="site-footer">
       <p data-i18n="footer">Hacknation 2026 projekt dla Urzędu Zamówień Publicznych</p>
     </footer>
-    <script src="app.js?v=26"></script>
+    <script src="app.js?v=27"></script>
   </body>
 </html>

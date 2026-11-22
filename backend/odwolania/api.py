@@ -32,8 +32,8 @@ async def process_documents(
     mode: str = Form(...),
     files: list[UploadFile] = File(...),
 ) -> dict:
-    if mode not in ("regular", "bielik"):
-        raise HTTPException(status_code=400, detail="mode must be regular or bielik")
+    if mode not in ("regular", "mistral"):
+        raise HTTPException(status_code=400, detail="mode must be regular or mistral")
     if not files:
         raise HTTPException(status_code=400, detail="at least one PDF is required")
 

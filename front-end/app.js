@@ -9,12 +9,12 @@ const viewButtons = document.querySelectorAll("[data-view]");
 const viewSwitch = document.querySelector(".source-switch");
 const modeButtons = document.querySelectorAll("[data-mode]");
 const langButtons = document.querySelectorAll("[data-lang]");
-const bielikSettings = document.querySelector("#bielik-settings");
-const bielikKey = document.querySelector("#bielik-key");
-const bielikBaseUrl = document.querySelector("#bielik-base-url");
-const bielikModel = document.querySelector("#bielik-model");
-const bielikStatus = document.querySelector("#bielik-status");
-const bielikCheck = document.querySelector("#bielik-check");
+const mistralSettings = document.querySelector("#mistral-settings");
+const mistralKey = document.querySelector("#mistral-key");
+const mistralBaseUrl = document.querySelector("#mistral-base-url");
+const mistralModel = document.querySelector("#mistral-model");
+const mistralStatus = document.querySelector("#mistral-status");
+const mistralCheck = document.querySelector("#mistral-check");
 const samplePicker = document.querySelector("#sample-picker");
 const sampleSelect = document.querySelector("#sample-select");
 const sampleLoad = document.querySelector("#sample-load");
@@ -24,7 +24,7 @@ const MAX_PDFS = 150;
 const VALID_TYPES = ["odwolanie", "pelnomocnictwo", "przelew"];
 // The Hacknation Task view has no mode switch. On 20 random cases Mistral alone scored
 // F1 0.995, ahead of Regular (0.984) and Regular + Mistral (0.982).
-const TASK_MODE = "bielik_only";
+const TASK_MODE = "mistral_only";
 
 const copy = {
   pl: {
@@ -61,10 +61,10 @@ const copy = {
     processingHint: "Wybierz sposób odczytu tej sprawy.",
     modeRegular: "Regularne",
     modeRegularHint: "Bez modelu językowego",
-    modeBielik: "Mistral",
-    modeBielikHint: "Reguły, potem model",
-    modeBielikOnly: "Tylko Mistral",
-    modeBielikOnlyHint: "Bez reguł, same wywołania modelu",
+    modeMistral: "Mistral",
+    modeMistralHint: "Reguły, potem model",
+    modeMistralOnly: "Tylko Mistral",
+    modeMistralOnlyHint: "Bez reguł, same wywołania modelu",
     documents: "Dokumenty",
     inputFolder: "Folder input",
     selectAll: "Zaznacz wszystkie",
@@ -96,8 +96,8 @@ const copy = {
     tooMany: "Można dodać najwyżej 150 plików PDF.",
     uncertain: "Niepewne",
     filesTotal: "{count} plików · {size}",
-    bielikNote: "Model Mistral nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
-    bielikUsed: "Mistral",
+    mistralNote: "Model Mistral nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
+    mistralUsed: "Mistral",
     tokens: "Tokeny",
     promptTokens: "prompt",
     completionTokens: "odpowiedź",
@@ -138,19 +138,19 @@ const copy = {
       przelew: "Przelew",
     },
     footer: "Hacknation 2026 projekt dla Urzędu Zamówień Publicznych",
-    modeName: { regular: "przetwarzanie regularne", bielik: "Mistral", bielik_only: "Tylko Mistral" },
+    modeName: { regular: "przetwarzanie regularne", mistral: "Mistral", mistral_only: "Tylko Mistral" },
     apiErrorHosted: "Ekstraktor nie odpowiada. Odśwież stronę i spróbuj ponownie.",
-    bielikKeyTitle: "Klucz API Mistral",
-    bielikKeyHint: "Klucz jest tylko w pamięci tej karty i trafia wyłącznie do lokalnego serwera PrzetarGO. Nie jest nigdzie zapisywany.",
-    bielikCheck: "Sprawdź połączenie",
-    bielikAdvanced: "Ustawienia zaawansowane",
-    bielikBaseUrl: "Adres API (zgodny z OpenAI)",
-    bielikModel: "Model",
-    bielikChecking: "Sprawdzanie połączenia…",
-    bielikOk: "Połączono z modelem {model}.",
-    bielikServerKey: "Serwer ma ustawiony MISTRAL_API_KEY. Zostaw pole puste, aby go użyć.",
-    bielikKeyMissing: "Wpisz klucz API Mistral albo wybierz tryb Regularne.",
-    bielikKeyRejected: "API odrzuciło klucz albo model. Sprawdź klucz i spróbuj ponownie.",
+    mistralKeyTitle: "Klucz API Mistral",
+    mistralKeyHint: "Klucz jest tylko w pamięci tej karty i trafia wyłącznie do lokalnego serwera PrzetarGO. Nie jest nigdzie zapisywany.",
+    mistralCheck: "Sprawdź połączenie",
+    mistralAdvanced: "Ustawienia zaawansowane",
+    mistralBaseUrl: "Adres API (zgodny z OpenAI)",
+    mistralModel: "Model",
+    mistralChecking: "Sprawdzanie połączenia…",
+    mistralOk: "Połączono z modelem {model}.",
+    mistralServerKey: "Serwer ma ustawiony MISTRAL_API_KEY. Zostaw pole puste, aby go użyć.",
+    mistralKeyMissing: "Wpisz klucz API Mistral albo wybierz tryb Regularne.",
+    mistralKeyRejected: "API odrzuciło klucz albo model. Sprawdź klucz i spróbuj ponownie.",
     llmFailures: "nieudane: {count}",
     ocrMissing: "Tesseract OCR nie jest zainstalowany, więc skany nie zostaną odczytane. PDF-y z tekstem działają. Uruchom: python doctor.py",
     needsOcr: "To skan bez warstwy tekstowej i nie udało się go odczytać przez OCR. Wynik jest pusty, a nie zgadywany.",
@@ -194,10 +194,10 @@ const copy = {
     processingHint: "Choose how this case will be read.",
     modeRegular: "Regular",
     modeRegularHint: "No language model",
-    modeBielik: "Mistral",
-    modeBielikHint: "Rules, then the model",
-    modeBielikOnly: "Mistral only",
-    modeBielikOnlyHint: "No rules, model calls only",
+    modeMistral: "Mistral",
+    modeMistralHint: "Rules, then the model",
+    modeMistralOnly: "Mistral only",
+    modeMistralOnlyHint: "No rules, model calls only",
     documents: "Documents",
     inputFolder: "Input folder",
     selectAll: "Select all",
@@ -229,8 +229,8 @@ const copy = {
     tooMany: "You can add up to 150 PDFs.",
     uncertain: "Uncertain",
     filesTotal: "{count} files · {size}",
-    bielikNote: "Mistral is not connected. This run used the deterministic extractor.",
-    bielikUsed: "Mistral",
+    mistralNote: "Mistral is not connected. This run used the deterministic extractor.",
+    mistralUsed: "Mistral",
     tokens: "Tokens",
     promptTokens: "prompt",
     completionTokens: "completion",
@@ -271,19 +271,19 @@ const copy = {
       przelew: "Transfer",
     },
     footer: "HackNation 2026 project for the Public Procurement Office",
-    modeName: { regular: "regular processing", bielik: "Mistral", bielik_only: "Mistral only" },
+    modeName: { regular: "regular processing", mistral: "Mistral", mistral_only: "Mistral only" },
     apiErrorHosted: "The extractor did not respond. Refresh the page and try again.",
-    bielikKeyTitle: "Mistral API key",
-    bielikKeyHint: "The key stays in this tab's memory and is sent only to your local PrzetarGO server. It is never saved.",
-    bielikCheck: "Check connection",
-    bielikAdvanced: "Advanced settings",
-    bielikBaseUrl: "API base URL (OpenAI-compatible)",
-    bielikModel: "Model",
-    bielikChecking: "Checking the connection…",
-    bielikOk: "Connected to {model}.",
-    bielikServerKey: "The server has MISTRAL_API_KEY set. Leave this empty to use it.",
-    bielikKeyMissing: "Enter a Mistral API key, or choose Regular mode.",
-    bielikKeyRejected: "The API rejected the key or the model. Check the key and try again.",
+    mistralKeyTitle: "Mistral API key",
+    mistralKeyHint: "The key stays in this tab's memory and is sent only to your local PrzetarGO server. It is never saved.",
+    mistralCheck: "Check connection",
+    mistralAdvanced: "Advanced settings",
+    mistralBaseUrl: "API base URL (OpenAI-compatible)",
+    mistralModel: "Model",
+    mistralChecking: "Checking the connection…",
+    mistralOk: "Connected to {model}.",
+    mistralServerKey: "The server has MISTRAL_API_KEY set. Leave this empty to use it.",
+    mistralKeyMissing: "Enter a Mistral API key, or choose Regular mode.",
+    mistralKeyRejected: "The API rejected the key or the model. Check the key and try again.",
     llmFailures: "failed: {count}",
     ocrMissing: "Tesseract OCR is not installed, so scans cannot be read. Text PDFs still work. Run: python doctor.py",
     needsOcr: "This is a scan with no text layer and OCR could not read it. The result is empty, not guessed.",
@@ -317,13 +317,13 @@ const state = {
 
 let inputCatalog = [];
 
-[bielikKey, bielikBaseUrl, bielikModel].forEach((field) => {
+[mistralKey, mistralBaseUrl, mistralModel].forEach((field) => {
   field.addEventListener("input", () => {
     state.keyStatus = null;
     renderKeyStatus();
   });
 });
-bielikCheck.addEventListener("click", checkKey);
+mistralCheck.addEventListener("click", checkKey);
 sampleLoad.addEventListener("click", loadSample);
 
 langButtons.forEach((button) => {
@@ -482,7 +482,7 @@ function selectMode(mode) {
     button.classList.toggle("is-selected", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
-  bielikSettings.hidden = state.view === "task" || !needsBielik(mode);
+  mistralSettings.hidden = state.view === "task" || !needsMistral(mode);
 }
 
 function selectView(view) {
@@ -500,14 +500,14 @@ function selectView(view) {
   document.querySelector(".mode-bar").hidden = task;
   document.querySelector("#task-mode").hidden = !task;
   document.querySelector("#task-key").hidden = !task;
-  bielikSettings.hidden = task || !needsBielik(state.mode);
+  mistralSettings.hidden = task || !needsMistral(state.mode);
   state.notice = null;
   renderNotice();
   renderFiles();
 }
 
-function needsBielik(mode) {
-  return mode === "bielik" || mode === "bielik_only";
+function needsMistral(mode) {
+  return mode === "mistral" || mode === "mistral_only";
 }
 
 function apiBase() {
@@ -594,10 +594,10 @@ function plNumber(value) {
 
 function llmHeaders() {
   const headers = {};
-  const key = state.view === "task" ? taskApiKey : bielikKey.value.trim();
+  const key = state.view === "task" ? taskApiKey : mistralKey.value.trim();
   if (key) headers["X-LLM-Key"] = key;
-  if (state.view !== "task" && bielikBaseUrl.value.trim()) headers["X-LLM-Base-Url"] = bielikBaseUrl.value.trim();
-  if (state.view !== "task" && bielikModel.value.trim()) headers["X-LLM-Model"] = bielikModel.value.trim();
+  if (state.view !== "task" && mistralBaseUrl.value.trim()) headers["X-LLM-Base-Url"] = mistralBaseUrl.value.trim();
+  if (state.view !== "task" && mistralModel.value.trim()) headers["X-LLM-Model"] = mistralModel.value.trim();
   return headers;
 }
 
@@ -611,14 +611,14 @@ async function addTaskKey() {
     return;
   }
   taskKeyAdd.disabled = true;
-  status.textContent = t("bielikChecking");
+  status.textContent = t("mistralChecking");
   try {
     const response = await fetch(`${apiBase()}/api/llm/check`, {
       method: "POST",
       headers: { "X-LLM-Key": value },
     });
     const body = await response.json();
-    if (!response.ok || !body.ok) throw new Error((body && (body.error || body.detail)) || t("bielikKeyRejected"));
+    if (!response.ok || !body.ok) throw new Error((body && (body.error || body.detail)) || t("mistralKeyRejected"));
     taskApiKey = value;
     taskKeyInput.value = "";
     state.taskKeyAdded = true;
@@ -628,7 +628,7 @@ async function addTaskKey() {
     taskApiKey = "";
     state.taskKeyAdded = false;
     status.classList.add("is-bad");
-    status.textContent = (error && error.message) || t("bielikKeyRejected");
+    status.textContent = (error && error.message) || t("mistralKeyRejected");
   } finally {
     taskKeyAdd.disabled = false;
   }
@@ -642,19 +642,19 @@ function renderTaskKeyStatus() {
 }
 
 function renderKeyStatus() {
-  bielikStatus.className = "key-status";
+  mistralStatus.className = "key-status";
   if (state.keyStatus === "checking") {
-    bielikStatus.textContent = t("bielikChecking");
+    mistralStatus.textContent = t("mistralChecking");
   } else if (state.keyStatus === "ok") {
-    bielikStatus.classList.add("is-ok");
-    bielikStatus.textContent = t("bielikOk").replace("{model}", state.keyModel || "Mistral");
+    mistralStatus.classList.add("is-ok");
+    mistralStatus.textContent = t("mistralOk").replace("{model}", state.keyModel || "Mistral");
   } else if (state.keyStatus && state.keyStatus.error) {
-    bielikStatus.classList.add("is-bad");
-    bielikStatus.textContent = state.keyStatus.error;
-  } else if (state.serverKey && !bielikKey.value.trim()) {
-    bielikStatus.textContent = t("bielikServerKey");
+    mistralStatus.classList.add("is-bad");
+    mistralStatus.textContent = state.keyStatus.error;
+  } else if (state.serverKey && !mistralKey.value.trim()) {
+    mistralStatus.textContent = t("mistralServerKey");
   } else {
-    bielikStatus.textContent = "";
+    mistralStatus.textContent = "";
   }
 }
 
@@ -666,7 +666,7 @@ async function checkKey() {
     const body = await response.json();
     if (!response.ok) throw new Error(body.detail || String(response.status));
     state.keyModel = body.model || "";
-    state.keyStatus = body.ok ? "ok" : { error: body.error || t("bielikKeyMissing") };
+    state.keyStatus = body.ok ? "ok" : { error: body.error || t("mistralKeyMissing") };
   } catch (error) {
     state.keyStatus = { error: error.message || apiErrorText() };
   }
@@ -890,11 +890,11 @@ async function submitFiles() {
     : state.files.slice(0, MAX_PDFS).map((item) => ({ upload: item.file, name: item.file.name }));
   if (jobs.length === 0) return;
   const mode = task ? TASK_MODE : state.mode;
-  const hasKey = task ? taskApiKey || state.serverKey : bielikKey.value.trim() || state.serverKey;
-  if (needsBielik(mode) && !hasKey) {
-    state.notice = { key: "bielikKeyMissing" };
+  const hasKey = task ? taskApiKey || state.serverKey : mistralKey.value.trim() || state.serverKey;
+  if (needsMistral(mode) && !hasKey) {
+    state.notice = { key: "mistralKeyMissing" };
     renderNotice();
-    (task ? taskKeyInput : bielikKey).focus();
+    (task ? taskKeyInput : mistralKey).focus();
     return;
   }
   state.busy = true;
@@ -984,8 +984,8 @@ async function ensureOk(response) {
     detail = "";
   }
   const error = new Error(String(response.status));
-  if (detail === "llm_key_missing") error.notice = { key: "bielikKeyMissing" };
-  else if (detail === "llm_key_rejected") error.notice = { key: "bielikKeyRejected" };
+  if (detail === "llm_key_missing") error.notice = { key: "mistralKeyMissing" };
+  else if (detail === "llm_key_rejected") error.notice = { key: "mistralKeyRejected" };
   else if (typeof detail === "string" && detail) error.notice = { text: detail };
   throw error;
 }
@@ -1063,7 +1063,7 @@ function renderOutputs() {
       .replace("{average}", formatDuration(items.length ? run.elapsed / items.length : 0)),
     "report-strong"
   );
-  if (run.servedMode === "bielik" || run.servedMode === "bielik_only") {
+  if (run.servedMode === "mistral" || run.servedMode === "mistral_only") {
     const usage = run.usage || {};
     const prompt = Number(usage.prompt_tokens) || 0;
     const completion = Number(usage.completion_tokens) || 0;

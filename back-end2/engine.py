@@ -4,21 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llm_fill import extract_bielik_only, fill_with_bielik, review_marks, tag_rules
+from llm_fill import extract_mistral_only, fill_with_mistral, review_marks, tag_rules
 from odwolania.llm import LLMAuthError, current_usage, set_llm_document
 from pdf_reader import OCR_MISSING_HINT, read_pdf
 from pipeline import load_rules, process_pdf
 
-# Internal names predate the switch from Bielik to Mistral; the UI and older scripts still send them.
-MODES = ("regular", "bielik", "bielik_only")
+MODES = ("regular", "mistral", "mistral_only")
 MODE_ALIASES = {
     "deterministic": "regular",
-    "hybrid": "bielik",
-    "mistral": "bielik",
-    "llm-only": "bielik_only",
-    "mistral-only": "bielik_only",
+    "hybrid": "mistral",
+    "llm-only": "mistral_only",
+    "mistral-only": "mistral_only",
 }
-LLM_MODES = ("bielik", "bielik_only")
+LLM_MODES = ("mistral", "mistral_only")
 RULES = load_rules()
 
 
@@ -48,9 +46,9 @@ def extract_document(path: Path, filename: str, mode: str, rules: dict | None = 
 
 
 def _extract(path: Path, filename: str, mode: str, rules: dict) -> dict:
-    if mode == "bielik_only":
+    if mode == "mistral_only":
         document = read_pdf(path)
-        payload, document_type, sources, raw = extract_bielik_only(path)
+        payload, document_type, sources, raw = extract_mistral_only(path)
         diagnostic = {
             "document_type": document_type,
             "warnings": [OCR_MISSING_HINT] if document.needs_ocr else [],
@@ -67,10 +65,10 @@ def _extract(path: Path, filename: str, mode: str, rules: dict) -> dict:
     diagnostic["file"] = filename
     sources = tag_rules(payload)
     raw = payload
-    bielik: dict = {}
-    if mode == "bielik":
+    mistral: dict = {}
+    if mode == "mistral":
         try:
-            payload, document_type, sources, bielik, raw = fill_with_bielik(
+            payload, document_type, sources, mistral, raw = fill_with_mistral(
                 path, payload, diagnostic["document_type"]
             )
             diagnostic = dict(diagnostic)
@@ -83,12 +81,12 @@ def _extract(path: Path, filename: str, mode: str, rules: dict) -> dict:
                 "Mistral fill failed; deterministic values were kept."
             ]
             raw = payload
-            bielik = {}
+            mistral = {}
     item = envelope(filename, payload, diagnostic, None)
     item["sources"] = sources
     item["raw"] = raw
-    if mode == "bielik":
-        item["review"] = review_marks(payload, sources, bielik)
+    if mode == "mistral":
+        item["review"] = review_marks(payload, sources, mistral)
     return item
 
 

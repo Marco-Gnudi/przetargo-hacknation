@@ -48,18 +48,18 @@ def process_file(
 ) -> ProcessedFile:
     """Classify and extract one PDF. `regular` never calls the LLM.
 
-    `bielik` fills from the model after the rules. `bielik_only` never runs
+    `mistral` fills from the model after the rules. `mistral_only` never runs
     a deterministic extractor: every value comes from the model.
     A known `document_type` (e.g. from back-end2's classifier) skips classification.
     """
-    if mode not in ("regular", "bielik", "bielik_only"):
-        raise ValueError("mode must be regular, bielik, or bielik_only")
+    if mode not in ("regular", "mistral", "mistral_only"):
+        raise ValueError("mode must be regular, mistral, or mistral_only")
     text = read_pdf(pdf_path)
     use_llm = mode != "regular"
     document_type = document_type or classify(text)
     if document_type is None:
         return ProcessedFile(filename or pdf_path.name, None, {}, {})
-    if mode == "bielik_only":
+    if mode == "mistral_only":
         extracted = extract_llm(document_type, text)
         return ProcessedFile(
             filename or pdf_path.name,

@@ -33,7 +33,7 @@ def no_key(monkeypatch):
 
 @pytest.mark.parametrize(
     ("name", "mode"),
-    [("deterministic", "regular"), ("hybrid", "bielik"), ("Mistral", "bielik"), ("llm-only", "bielik_only"), ("regular", "regular")],
+    [("deterministic", "regular"), ("hybrid", "mistral"), ("Mistral", "mistral"), ("llm-only", "mistral_only"), ("regular", "regular")],
 )
 def test_mode_names_map_to_engine_modes(name, mode):
     assert engine.normalise_mode(name) == mode
