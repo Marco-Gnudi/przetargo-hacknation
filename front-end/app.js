@@ -38,6 +38,9 @@ const copy = {
     taskMode: "Zadanie Hacknation przetwarza dokumenty trybem Tylko Mistral.",
     taskKeyLabel: "Klucz API Mistral",
     taskKeyAdd: "Dodaj",
+    showKey: "Pokaż klucz",
+    hideKey: "Ukryj klucz",
+    downloadOutput: "Pobierz JSON",
     taskKeyHint: "Klucz zostaje tylko w pamięci tej karty. Nie jest zapisywany w przeglądarce, na dysku ani w logach.",
     taskKeyAdded: "Klucz dodany. Połączono z modelem {model}.",
     taskKeyEmpty: "Wpisz klucz API.",
@@ -171,6 +174,9 @@ const copy = {
     taskMode: "The Hacknation Task processes documents with Mistral only.",
     taskKeyLabel: "Mistral API key",
     taskKeyAdd: "Add",
+    showKey: "Show key",
+    hideKey: "Hide key",
+    downloadOutput: "Download JSON",
     taskKeyHint: "The key stays in this tab's memory only. It is not saved in the browser, on disk or in logs.",
     taskKeyAdded: "Key added. Connected to {model}.",
     taskKeyEmpty: "Enter an API key.",
@@ -342,7 +348,23 @@ const taskKeyInput = document.querySelector("#task-key-input");
 const taskKeyAdd = document.querySelector("#task-key-add");
 let taskApiKey = "";
 
+const taskKeyReveal = document.querySelector("#task-key-reveal");
 taskKeyAdd.addEventListener("click", addTaskKey);
+taskKeyReveal.addEventListener("click", () => {
+  const showing = taskKeyReveal.getAttribute("aria-pressed") === "true";
+  if (showing) {
+    if (taskApiKey && taskKeyInput.value === taskApiKey) taskKeyInput.value = "";
+    taskKeyInput.type = "password";
+    taskKeyReveal.setAttribute("aria-pressed", "false");
+    taskKeyReveal.dataset.i18nAria = "showKey";
+  } else {
+    if (!taskKeyInput.value && taskApiKey) taskKeyInput.value = taskApiKey;
+    taskKeyInput.type = "text";
+    taskKeyReveal.setAttribute("aria-pressed", "true");
+    taskKeyReveal.dataset.i18nAria = "hideKey";
+  }
+  taskKeyReveal.setAttribute("aria-label", t(taskKeyReveal.dataset.i18nAria));
+});
 taskKeyInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
@@ -1099,7 +1121,100 @@ function renderOutputs() {
     report.append(paths);
     if (state.outputRoot) line(t("outputRoot").replace("{path}", state.outputRoot), "input-hint");
   }
+  if (items.some((item) => item && item.result)) {
+    const download = document.createElement("button");
+    download.type = "button";
+    download.className = "btn btn-primary";
+    download.textContent = t("downloadOutput");
+    download.addEventListener("click", () => downloadOutput(items));
+    report.append(download);
+  }
   summary.append(report);
+}
+
+function downloadOutput(items) {
+  const files = items
+    .filter((item) => item && item.result)
+    .map((item) => ({
+      name: (item.output || `${(item.filename || "document").replace(/\.pdf$/i, "")}.json`).replace(/^output\//, ""),
+      text: JSON.stringify(item.result, null, 2) + "\n",
+    }));
+  if (files.length === 0) return;
+  if (files.length === 1) {
+    const name = files[0].name.split("/").pop();
+    saveBlob(new Blob([files[0].text], { type: "application/json" }), name);
+    return;
+  }
+  saveBlob(new Blob([zipStored(files)], { type: "application/zip" }), "output.zip");
+}
+
+function saveBlob(blob, name) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function zipStored(files) {
+  const encoder = new TextEncoder();
+  const locals = [];
+  const central = [];
+  let offset = 0;
+  files.forEach((file) => {
+    const name = encoder.encode(file.name);
+    const data = encoder.encode(file.text);
+    const checksum = crc32(data);
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);
+    local.setUint16(6, 0x0800, true);
+    local.setUint32(14, checksum, true);
+    local.setUint32(18, data.length, true);
+    local.setUint32(22, data.length, true);
+    local.setUint16(26, name.length, true);
+    locals.push(new Uint8Array(local.buffer), name, data);
+    const header = new DataView(new ArrayBuffer(46));
+    header.setUint32(0, 0x02014b50, true);
+    header.setUint16(4, 20, true);
+    header.setUint16(6, 20, true);
+    header.setUint16(8, 0x0800, true);
+    header.setUint32(16, checksum, true);
+    header.setUint32(20, data.length, true);
+    header.setUint32(24, data.length, true);
+    header.setUint16(28, name.length, true);
+    header.setUint32(42, offset, true);
+    central.push(new Uint8Array(header.buffer), name);
+    offset += 30 + name.length + data.length;
+  });
+  const directory = concatBytes(central);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, files.length, true);
+  end.setUint16(10, files.length, true);
+  end.setUint32(12, directory.length, true);
+  end.setUint32(16, offset, true);
+  return concatBytes([...locals, directory, new Uint8Array(end.buffer)]);
+}
+
+function concatBytes(parts) {
+  const size = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(size);
+  let cursor = 0;
+  parts.forEach((part) => {
+    out.set(part, cursor);
+    cursor += part.length;
+  });
+  return out;
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let index = 0; index < bytes.length; index += 1) {
+    crc ^= bytes[index];
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 function jobOutcome(item) {

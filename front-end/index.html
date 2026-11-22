@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrzetarGO</title>
-    <link rel="stylesheet" href="styles.css?v=27" />
+    <link rel="stylesheet" href="styles.css?v=28" />
   </head>
   <body>
     <header class="site-header">
@@ -57,18 +57,27 @@
       <section id="task-key" class="task-key" aria-labelledby="task-key-label">
         <div class="task-key-row">
           <label id="task-key-label" class="task-key-label" for="task-key-input" data-i18n="taskKeyLabel">Klucz API Mistral</label>
-          <input
-            id="task-key-input"
-            class="text-input"
-            type="password"
-            maxlength="512"
-            autocomplete="off"
-            autocapitalize="off"
-            autocorrect="off"
-            spellcheck="false"
-            placeholder="MISTRAL_API_KEY"
-            data-i18n-aria="taskKeyLabel"
-          />
+          <div class="key-field">
+            <input
+              id="task-key-input"
+              class="text-input"
+              type="password"
+              maxlength="512"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck="false"
+              placeholder="MISTRAL_API_KEY"
+              data-i18n-aria="taskKeyLabel"
+            />
+            <button type="button" id="task-key-reveal" class="key-reveal" aria-pressed="false" data-i18n-aria="showKey">
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"/>
+                <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>
+                <path class="key-reveal-slash" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 20 20 4"/>
+              </svg>
+            </button>
+          </div>
           <button type="button" id="task-key-add" class="btn btn-primary" data-i18n="taskKeyAdd">Dodaj</button>
         </div>
         <p class="input-hint" data-i18n="taskKeyHint">Klucz zostaje tylko w pamięci tej karty. Nie jest zapisywany w przeglądarce, na dysku ani w logach.</p>
@@ -211,6 +220,6 @@
     <footer class="site-footer">
       <p data-i18n="footer">Hacknation 2026 projekt dla Urzędu Zamówień Publicznych</p>
     </footer>
-    <script src="app.js?v=27"></script>
+    <script src="app.js?v=28"></script>
   </body>
 </html>

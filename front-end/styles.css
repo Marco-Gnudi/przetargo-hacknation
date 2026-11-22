@@ -236,9 +236,33 @@ a {
   font-weight: 600;
 }
 
-.task-key-row .text-input {
+.key-field {
+  position: relative;
   flex: 1 1 220px;
   min-width: 0;
+  display: flex;
+}
+
+.key-field .text-input {
+  width: 100%;
+  padding-right: 40px;
+}
+
+.key-reveal {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  border: 0;
+  padding: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.key-reveal[aria-pressed="true"] .key-reveal-slash {
+  display: none;
 }
 
 .case-total {
@@ -590,6 +614,10 @@ a {
 
 .run-report .report-strong {
   font-weight: 600;
+}
+
+.run-report .btn {
+  margin-top: 8px;
 }
 
 .run-report .is-ok {
