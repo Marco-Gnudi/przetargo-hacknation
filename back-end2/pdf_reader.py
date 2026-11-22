@@ -24,7 +24,7 @@ os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 
 # PSM 4 and 6 tied on skany 0001 (19/28 gold strings). These pages are one block, so PSM 6 stays.
 OCR_PSM = 6
-_OCR_CACHE_VERSION = "v3-osd"
+_OCR_CACHE_VERSION = "v5-rot"
 _MIN_CHARS_PER_PAGE = 50
 _PAGE_TIMEOUT_SECONDS = 90
 _ENV_PATH = Path(__file__).resolve().parents[1] / "backend" / ".env"
@@ -252,13 +252,21 @@ def _ocr_pages(pdf, indexes: list[int] | None = None) -> list[str]:
         text = _tesseract(image, config)
         # Upside-down pages still yield word-like tokens, so the first page is always checked.
         if position == 0 or _word_share(text) < 0.35:
-            angle = _osd_angle(image)
-            if angle:
+            best_angle, best_share = 0, _word_share(text)
+            # Low-confidence OSD guesses are often wrong, so a page that still reads badly tries every right angle.
+            guess = _osd_angle(image)
+            # OSD mixes up 90 and 270, so a sideways guess is checked against its opposite.
+            flipped = (guess + 180) % 360 if guess in (90, 270) else None
+            for angle in dict.fromkeys(a for a in (guess, flipped, 90, 180, 270) if a is not None):
+                if angle == 0:
+                    continue
+                if angle not in (guess, flipped) and best_share >= 0.35:
+                    break
                 second = _tesseract(image.rotate(-angle, expand=True, fillcolor=255), config)
-                if _word_share(second) > _word_share(text):
-                    text = second
-                    if position == 0:
-                        document_angle = angle
+                if _word_share(second) > best_share:
+                    text, best_angle, best_share = second, angle, _word_share(second)
+            if position == 0:
+                document_angle = best_angle
         parts.append(text)
     return parts
 
