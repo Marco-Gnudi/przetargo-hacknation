@@ -34,7 +34,8 @@ from odwolania.llm import (
 )
 
 MAX_BYTES = 20 * 1024 * 1024
-MAX_FILES = 30
+# The evaluation set is 150 documents; the page uploads them in batches of 10 into one case.
+MAX_FILES = 150
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = REPO_ROOT / "front-end"
 DATASET = REPO_ROOT / "UZP-hacknation-task" / "dane"
@@ -203,6 +204,7 @@ def extract_batch(
     request: Request,
     files: list[UploadFile] = File(...),
     mode: str = Form("regular"),
+    case: str = Form(""),
     nocache: str = Form("0"),
     nocache_query: str = Query("", alias="nocache"),
 ):
@@ -216,7 +218,10 @@ def extract_batch(
     set_skip_cache(_enabled(nocache) or _enabled(nocache_query))
     started = time.perf_counter()
     selected = files[:MAX_FILES]
-    case = None if hosted() else _next_case_name()
+    if hosted():
+        case = None
+    elif not re.fullmatch(r"case\d{1,6}", case):
+        case = _next_case_name()
     results = []
     for upload in selected:
         filename = Path(upload.filename or "document.pdf").name
@@ -337,6 +342,11 @@ def _save_and_process(filename: str, data: bytes, mode: str, case_dir: Path, cas
         return _process_bytes(filename, data, mode)
     case_dir.mkdir(parents=True, exist_ok=True)
     destination = case_dir / filename
+    copy = 2
+    while destination.exists():
+        destination = case_dir / f"{Path(filename).stem}_{copy}{Path(filename).suffix}"
+        copy += 1
+    filename = destination.name
     destination.write_bytes(data)
     item = extract_document(destination, filename, mode)
     item["size"] = len(data)

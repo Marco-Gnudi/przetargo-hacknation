@@ -20,7 +20,8 @@ const sampleSelect = document.querySelector("#sample-select");
 const sampleLoad = document.querySelector("#sample-load");
 const inputFolder = document.querySelector("#input-folder");
 const ocrWarning = document.querySelector("#ocr-warning");
-const MAX_PDFS = 30;
+const MAX_PDFS = 150;
+const UPLOAD_BATCH = 10;
 
 const copy = {
   pl: {
@@ -43,9 +44,9 @@ const copy = {
     deleteInputConfirm: "Usunąć pliki z folderu input? Folder output zostanie.",
     inputEmpty: "Folder input jest pusty. Dodaj katalog sprawy z plikami PDF.",
     inputHint: "Zaznacz sprawy z folderu input. Wynik trafi do folderu output.",
-    dropAria: "Dodaj do 30 plików PDF. Upuść je tutaj albo naciśnij Enter, aby wybrać je z urządzenia.",
+    dropAria: "Dodaj do 150 plików PDF. Upuść je tutaj albo naciśnij Enter, aby wybrać je z urządzenia.",
     dropTitle: "Upuść pliki PDF tutaj albo dodaj je ze swojego urządzenia.",
-    dropHint: "Do 30 plików PDF.",
+    dropHint: "Do 150 plików PDF.",
     process: "Przetwórz dokumenty",
     summary: "Podsumowanie",
     summaryEmpty: "Kompletność i brakujące informacje pojawią się po przetworzeniu sprawy.",
@@ -61,9 +62,10 @@ const copy = {
     colStatus: "Status",
     noCases: "Brak spraw.",
     processingNow: "Przetwarzanie…",
+    processingCount: "Przetwarzanie {done}/{total}…",
     apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom ponownie ./start.sh (w Windows start.bat).",
     emptyFiles: "Ten plik ma 0 bajtów w oknie wyboru, więc nie ma w nim treści PDF. Wybierz PDF, przy którym widać rozmiar.",
-    tooMany: "Można dodać najwyżej 30 plików PDF.",
+    tooMany: "Można dodać najwyżej 150 plików PDF.",
     uncertain: "Niepewne",
     filesTotal: "{count} plików · {size}",
     bielikNote: "Model Mistral nie jest podłączony. Ten przebieg użył ekstraktora deterministycznego.",
@@ -137,9 +139,9 @@ const copy = {
     deleteInputConfirm: "Delete the files in the input folder? The output folder will stay.",
     inputEmpty: "The input folder is empty. Add a case folder of PDFs.",
     inputHint: "Select cases from the input folder. Results are written to the output folder.",
-    dropAria: "Add up to 30 PDF files. Drop them here or press Enter to choose them from your device.",
+    dropAria: "Add up to 150 PDF files. Drop them here or press Enter to choose them from your device.",
     dropTitle: "Drop PDFs here or add them from your device.",
-    dropHint: "Up to 30 PDFs.",
+    dropHint: "Up to 150 PDFs.",
     process: "Process documents",
     summary: "Summary",
     summaryEmpty: "Completeness and missing information will show here after a case is processed.",
@@ -155,9 +157,10 @@ const copy = {
     colStatus: "Status",
     noCases: "No cases yet.",
     processingNow: "Processing…",
+    processingCount: "Processing {done}/{total}…",
     apiError: "The extractor did not respond. Refresh this page. If it still fails, run ./start.sh again (start.bat on Windows).",
     emptyFiles: "That file is 0 bytes in the file window, so it has no PDF content. Choose a PDF that shows a size.",
-    tooMany: "You can add up to 30 PDFs.",
+    tooMany: "You can add up to 150 PDFs.",
     uncertain: "Uncertain",
     filesTotal: "{count} files · {size}",
     bielikNote: "Mistral is not connected. This run used the deterministic extractor.",
@@ -227,6 +230,7 @@ const state = {
   samples: [],
   keyStatus: null,
   keyModel: "",
+  progress: null,
 };
 
 let inputCatalog = [];
@@ -593,7 +597,9 @@ function renderFiles() {
     });
   }
   submitButton.disabled = state.busy || (state.files.length === 0 && state.selectedCases.size === 0);
-  submitButton.textContent = state.busy ? t("processingNow") : t("process");
+  if (!state.busy) submitButton.textContent = t("process");
+  else if (state.progress) submitButton.textContent = t("processingCount").replace("{done}", state.progress.done).replace("{total}", state.progress.total);
+  else submitButton.textContent = t("processingNow");
 }
 
 function renderInputCases() {
@@ -689,20 +695,30 @@ async function submitFiles() {
       servedMode = body.mode || servedMode;
     }
     if (selected.length > 0) {
-      const form = new FormData();
-      form.append("mode", mode);
-      selected.forEach((item) => form.append("files", item.file, item.file.name));
-      const response = await fetch(`${apiBase()}/api/extract/batch`, {
-        method: "POST",
-        headers: llmHeaders(),
-        body: form,
-      });
-      await ensureOk(response);
-      const body = await response.json();
-      results.push(...(body.results || []));
-      elapsed += Number(body.elapsed_seconds) || 0;
-      usage = body.usage || usage;
-      servedMode = body.mode || servedMode;
+      // Small batches show progress and keep each request short; all of them land in one input/caseN folder.
+      let caseName = "";
+      state.progress = { done: 0, total: selected.length };
+      renderFiles();
+      for (let start = 0; start < selected.length; start += UPLOAD_BATCH) {
+        const form = new FormData();
+        form.append("mode", mode);
+        if (caseName) form.append("case", caseName);
+        selected.slice(start, start + UPLOAD_BATCH).forEach((item) => form.append("files", item.file, item.file.name));
+        const response = await fetch(`${apiBase()}/api/extract/batch`, {
+          method: "POST",
+          headers: llmHeaders(),
+          body: form,
+        });
+        await ensureOk(response);
+        const body = await response.json();
+        caseName = body.case || caseName;
+        results.push(...(body.results || []));
+        elapsed += Number(body.elapsed_seconds) || 0;
+        usage = addUsage(usage, body.usage);
+        servedMode = body.mode || servedMode;
+        state.progress.done = Math.min(selected.length, start + UPLOAD_BATCH);
+        renderFiles();
+      }
       state.files = [];
     }
     state.submissions.push({
@@ -717,11 +733,22 @@ async function submitFiles() {
     state.notice = error && error.notice ? error.notice : { key: "apiError" };
   } finally {
     state.busy = false;
+    state.progress = null;
     renderNotice();
     renderFiles();
     renderOutputs();
     if (!state.hosted) loadInputCases();
   }
+}
+
+function addUsage(total, extra) {
+  if (!extra) return total;
+  if (!total) return { ...extra };
+  const sum = { ...total };
+  ["prompt_tokens", "completion_tokens", "calls", "failures"].forEach((key) => {
+    sum[key] = (Number(total[key]) || 0) + (Number(extra[key]) || 0);
+  });
+  return sum;
 }
 
 async function ensureOk(response) {
@@ -794,7 +821,7 @@ function renderOutputs() {
   } else {
     latest.results
       .filter((item) => item.status !== "rejected")
-      .forEach((item) => detail.append(renderResult(item)));
+      .forEach((item, index, shown) => detail.append(renderResult(item, shown.length <= 5 || index === 0)));
   }
 
   resultsBody.replaceChildren();
@@ -884,10 +911,10 @@ function ocrBadge(item) {
   return badge;
 }
 
-function renderResult(item) {
+function renderResult(item, open = true) {
   const article = document.createElement("details");
   article.className = "result";
-  article.open = true;
+  article.open = open;
   const heading = document.createElement("summary");
   const sizeLabel = Number.isFinite(item.size) ? ` · ${formatSize(item.size)}` : "";
   heading.textContent = `${item.filename}${sizeLabel} — ${typeLabel(item.document_type)}`;

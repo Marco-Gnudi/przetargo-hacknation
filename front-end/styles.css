@@ -446,7 +446,8 @@ a {
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
-  overflow: hidden;
+  max-height: 420px;
+  overflow-y: auto;
 }
 
 .file-list li {
