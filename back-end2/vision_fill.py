@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pymupdf
 
-from checksums import repair_nip, repair_nrb, repair_pesel, repair_regon
+from checksums import nip_ok, nrb_ok, pesel_ok, regon_ok, repair_nip, repair_nrb, repair_pesel, repair_regon
 
 LOW_CONFIDENCE = 60.0
 _CACHE = Path(__file__).resolve().parents[1] / "backend" / ".cache" / "vision"
@@ -232,7 +232,21 @@ def _merge(base, incoming, key: str):
         return merged
     if _blank(base) or _identifier_failed(key, base):
         return base if _blank(incoming) else incoming
+    if _check_digit_fails(key, base) and not _blank(incoming) and not _check_digit_fails(key, incoming):
+        return incoming
     return base
+
+
+_STRICT = {"nip": nip_ok, "regon": regon_ok, "pesel": pesel_ok, "na_rachunek": nrb_ok, "z_rachunku": nrb_ok}
+
+
+def _check_digit_fails(key: str, value) -> bool:
+    """A clean read can still fail its check digit; only a vision value that passes may replace it."""
+    check = _STRICT.get(key)
+    if check is None or _blank(value):
+        return False
+    digits = "".join(char for char in str(value) if char.isdigit())
+    return not check(digits)
 
 
 def _useful(value) -> bool:

@@ -18,6 +18,10 @@ from dotenv import load_dotenv
 from normalizers import clean_text, collapse_spaced_letters, compact
 from ocr_cleanup import cleanup_ocr
 
+# Tesseract's OpenMP threads thrash when several pages are OCR'd at once (parallel
+# requests or evaluation workers): a 3 s page can take over 10 minutes.
+os.environ.setdefault("OMP_THREAD_LIMIT", "1")
+
 # PSM 4 and 6 tied on skany 0001 (19/28 gold strings). These pages are one block, so PSM 6 stays.
 OCR_PSM = 6
 _OCR_CACHE_VERSION = "v3-osd"
@@ -192,6 +196,7 @@ def _measure_confidence(path: Path) -> float | None:
                     lang="pol",
                     config=f"--psm {OCR_PSM}",
                     output_type=pytesseract.Output.DICT,
+                    timeout=_PAGE_TIMEOUT_SECONDS,
                 )
             except Exception:
                 continue
