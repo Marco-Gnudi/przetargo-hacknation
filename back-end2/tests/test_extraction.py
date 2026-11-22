@@ -23,6 +23,17 @@ class NormalizerTests(unittest.TestCase):
         self.assertEqual(person_name("r. pr. Cezary Bartoszewicz nr wpisu"), "Cezary Bartoszewicz")
         self.assertIsNone(person_name("adw."))
 
+    def test_side_by_side_signatures(self):
+        from extractors.pelnomocnictwo import _signatories
+
+        text = "Pełnomocnictwo\nmiejsce na pieczęć firmową Marek Dobrowolski Ryszard Biernacki\nPrezes Zarządu Dyrektor"
+        self.assertEqual(
+            [item["imie_nazwisko"] for item in _signatories(text)],
+            ["Marek Dobrowolski", "Ryszard Biernacki"],
+        )
+        text = "Mocodawca: Pełnomocnictwo przyjmuję:\nOliwia Kaczmarek r. pr. Aleksandra Marciniak\nPrezes Zarządu"
+        self.assertEqual([item["imie_nazwisko"] for item in _signatories(text)], ["Oliwia Kaczmarek"])
+
 
 class CaseTests(unittest.TestCase):
     def test_przyklad_01_matches_reference(self):

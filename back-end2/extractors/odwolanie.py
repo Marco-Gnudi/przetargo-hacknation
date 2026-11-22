@@ -43,12 +43,27 @@ def _appellant(block, ocr=False):
     representative = _representative(block)
     return {
         "krs": ids["krs"],
-        "nazwa": _appellant_name(block),
+        "nazwa": _end_at_legal_form(_appellant_name(block)) if ocr else _appellant_name(block),
         "nip": ids["nip"],
         "regon": ids["regon"],
         "przez-pelnomocnika": 1 if representative["imie_nazwisko"] or representative["nazwa"] else 0,
         "pelnomocnik": representative,
     }
+
+
+_LEGAL_FORM = re.compile(
+    r"(?:sp\.\s?z\s?o\.\s?o\.|s\.\s?a\.|sp\.\s?[jkp]\.|sp[óo][łl]ka\s+(?:akcyjna|jawna|komandytowa|partnerska|"
+    r"z\s+ograniczon\w+\s+odpowiedzialno\w+))(?:\s+sp\.\s?k\.)?",
+    re.IGNORECASE,
+)
+
+
+def _end_at_legal_form(name):
+    """Stamps and specks after "sp. z o.o." on a scanned line are not part of the name."""
+    if not name:
+        return name
+    ends = [match.end() for match in _LEGAL_FORM.finditer(name)]
+    return name[: ends[-1]] if ends else name
 
 
 def _appellant_name(block):

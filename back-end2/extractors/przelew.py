@@ -98,7 +98,17 @@ def _fill_gaps(document, payload):
             transfer["kwota"] = amount(match.group(1))
     if transfer["data_operacji"] is None:
         transfer["data_operacji"] = _operation_date(text) or _first_date(text)
+    if ocr and transfer["tytul"]:
+        transfer["tytul"] = _tidy_ocr_title(transfer["tytul"], transfer["numer_transakcji"])
     return payload
+
+
+def _tidy_ocr_title(title, reference):
+    """Scans run the title into the next field; a reference printed in the title ends it."""
+    title = re.sub(r"^(?:przelewu|operacji)\b[\s:\-–]*", "", title, flags=re.IGNORECASE)
+    if reference and reference in title:
+        title = title[: title.index(reference) + len(reference)]
+    return title.strip(" ,.;-|") or None
 
 
 def _repeated_id(text):

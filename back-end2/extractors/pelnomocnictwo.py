@@ -79,20 +79,23 @@ def _legal_name(block):
         return _without_heading(compact(match.group(1)))
     pattern = re.compile(
         r"([A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż.&'-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\wąćęłńóśźż.&'-]*){0,6}\s+"
-        r"(?:S\.A\.|sp\.\s*z\s*o\.o\.(?:\s*sp\.\s*k\.)?|sp\.\s*k\.|sp\.\s*j\.))",
+        r"(?:S\.A\.|(?i:sp\.\s*z\s*o\.\s?o\.)(?:\s*sp\.\s*k\.)?|(?i:sp\.\s*k\.|sp\.\s*j\.)|"
+        r"(?i:sp[óo][łl]ka\s+(?:z\s+ograniczon\w+\s+odpowiedzialno\w+|akcyjna|komandytowa|jawna))))",
     )
+    names = []
     for found in pattern.finditer(flat):
         name = compact(found.group(1))
         name = re.sub(r"^.*\b(?:imieniu|Pe[łl]nomocnictwo(?:\s*procesowe)?)\s+", "", name, flags=re.IGNORECASE)
         name = _without_heading(name)
-        if re.search(r"\b(?:S\.A\.|sp\.)", name):
-            return name.strip(" ,;")
-    return None
+        if re.search(r"\b(?:S\.A\.|sp\.|sp[óo][łl]ka)", name, re.IGNORECASE):
+            seated = re.match(r"\s*,?\s*z\s+siedzib", flat[found.end():])
+            names.append((not seated, name.strip(" ,;")))
+    return min(names, key=lambda item: item[0])[1] if names else None
 
 
 def _without_heading(name):
     cleaned = re.sub(
-        r"^(?:mocodawca|pełnomocnik|pełnomocnictwo)\b\s*",
+        r"^(?:(?:mocodawca|pełnomocnik|pełnomocnictwo)\b\s*)+",
         "",
         name,
         flags=re.IGNORECASE,
@@ -113,9 +116,12 @@ def _signatories(text):
         cleaned = compact(line).strip(" ._")
         if not _role_line(cleaned) or index == 0:
             continue
-        name = person_name(compact(lines[index - 1]).strip(" ._"))
-        if name and name not in names:
-            names.append(name)
+        found = _names_in_signature_line(compact(lines[index - 1]).strip(" ._"))
+        if not found and index > 1 and re.search(r"miejsce\s+na\s+piecz", lines[index - 1], re.IGNORECASE):
+            found = _names_in_signature_line(compact(lines[index - 2]).strip(" ._"))
+        for name in found:
+            if name not in names:
+                names.append(name)
     if names:
         return [{"imie_nazwisko": name} for name in names]
     match = re.search(r"Mocodawca\s*:\s*(.+)", text, re.IGNORECASE | re.DOTALL)
@@ -133,6 +139,31 @@ def _signatories(text):
     return [{"imie_nazwisko": name} for name in names]
 
 
+_CAPITALISED_RUN = re.compile(r"[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż'-]+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż'-]+)+")
+
+
+def _names_in_signature_line(line):
+    """Signature columns side by side end up on one line: "Marek Dobrowolski Ryszard Biernacki"."""
+    line = re.sub(
+        r"(?i:r\.\s*pr\.|adw\.)\s+[A-ZĄĆĘŁŃÓŚŹŻ]\S+(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ]\S+){1,2}",
+        " | ",
+        line,
+    )
+    names = []
+    for run in _CAPITALISED_RUN.findall(line):
+        words = run.split()
+        if len(words) >= 4 and len(words) % 2 == 0:
+            names.extend(" ".join(words[i:i + 2]) for i in range(0, len(words), 2))
+        else:
+            name = person_name(run)
+            if name:
+                names.append(name)
+    if not names:
+        name = person_name(line.replace("|", " "))
+        names = [name] if name else []
+    return names
+
+
 def _checked_nip(ids, ocr):
     if ocr and ids.get("nip"):
         ids = dict(ids)
@@ -148,7 +179,12 @@ def _agents(flat, ocr=False):
     )
     for name_match in pattern.finditer(flat):
         name = _as_person(name_match.group(1))
-        if name and name not in found:
+        if not name:
+            continue
+        words = name.split()
+        if len(words) == 3 and (_NOT_A_NAME.match(words[2]) or words[2] in {"NIP", "PESEL", "KRS", "REGON"}):
+            name = " ".join(words[:2])
+        if name not in found and not any(name.startswith(known + " ") for known in found):
             found.append(name)
     if not found:
         found = _people_after(

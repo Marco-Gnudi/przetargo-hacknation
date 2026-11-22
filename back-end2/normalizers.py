@@ -145,7 +145,13 @@ def bzp_number(value):
 def ted_number(value):
     if not value:
         return None
-    match = re.search(r"(\d{4})\s*/\s*S\s*\d{1,3}\s*-\s*(\d{5,7})", value, re.IGNORECASE)
+    match = re.search(r"(\d{4})\s*/\s*[S5$]\s*\d{1,3}\s*-\s*(\d{5,7})", value, re.IGNORECASE)
+    if match:
+        return f"{match.group(2)}-{match.group(1)}"
+    # Scans read the S as 8 ("2026/8092-999328") or fuse it with the digits ("2026/5224429185").
+    match = re.search(r"\b(20\d{2})\s*/\s*8\s*\d{3}\s*[-—–]\s*(\d{6})\b", value) or re.search(
+        r"\b(20\d{2})\s*/\s*[S5$]\s?\d{3}(\d{6})\b", value
+    )
     if match:
         return f"{match.group(2)}-{match.group(1)}"
     match = re.search(r"\b(\d{5,7})\s*-\s*(\d{4})\b", value)

@@ -3,7 +3,7 @@
 import unittest
 
 from checksums import nip_ok, nrb_ok, repair_nrb
-from normalizers import parse_date
+from normalizers import parse_date, ted_number
 from ocr_cleanup import cleanup_ocr
 
 
@@ -45,6 +45,18 @@ class OcrCleanupTests(unittest.TestCase):
         cleaned = cleanup_ocr("Orbisol Budownictwo Sp. Z 0.0.\nOlszewski 6 Partnerzy sp. K.")
         self.assertIn("Orbisol Budownictwo Sp. z o.o.", cleaned)
         self.assertIn("Olszewski & Partnerzy sp. k.", cleaned)
+
+    def test_dot_leaders_do_not_glue_digits_onto_amounts(self):
+        cleaned = cleanup_ocr("KWOTA PRZELEWU .......uuaaaaananaaaaaraaaraa+141111... 50,00 PLN")
+        self.assertNotIn("141111", cleaned)
+        self.assertIn("50,00 PLN", cleaned)
+
+    def test_reference_codes_and_ted_lookalikes(self):
+        cleaned = cleanup_ocr("przed KIO.w przetargu Dl.578.2026 €EN2605113961811")
+        self.assertIn("KIO w przetargu DI.578.2026 CEN2605113961811", cleaned)
+        self.assertEqual(ted_number("Dzienniku Urzędowym UE: 2026/8092-999328"), "999328-2026")
+        self.assertEqual(ted_number("Unii Europejskiej nr 2026/5224429185"), "429185-2026")
+        self.assertEqual(ted_number("2026/S 174-005431"), "005431-2026")
 
 
 class ChecksumTests(unittest.TestCase):

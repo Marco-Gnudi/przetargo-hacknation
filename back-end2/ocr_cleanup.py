@@ -40,7 +40,12 @@ _TRAIL = re.compile(
 )
 _LONE = re.compile(rf"(?<=\S)\s+(?:{_JUNK}+|[.,:;]+)(?=\s+\S)")
 _REPEAT = re.compile(r"\b([a-z])(?:\s+\1\b)+")
-_AT_SURE = re.compile(r"(?<=[a-z0-9])(?:\(OQ|\(a\s?|\s?[Q©®G]\s?)(?=[a-z][a-z0-9-]*\.[a-z])")
+_AT_SURE = re.compile(r"(?<=[a-z0-9])(?:\(OQ|\(a\s?|\s?[Q©®G@]{1,2}\s?)(?=[a-z][a-z0-9-]*\.[a-z])")
+# Dot leaders ("KWOTA ........ 50,00") come back as "uuaaaanaaa+141111..." and glue digits onto values.
+_LEADER = re.compile(
+    r"(?<![^\s])(?=[^\s]*(?:aa|uu|\.\.\.|::|\+\+))[uaenrsL.,:;+_'1-4]{2,}"
+    r"(?:\s+(?=[^\s]*(?:aa|uu|\.\.\.|::|\+\+))[uaenrsL.,:;+_'1-4]{2,})*(?![^\s])"
+)
 _KNOWN_TLDS = ("pl", "com", "eu", "net", "org", "info", "biz", "gov", "edu", "de", "uk", "example")
 _DOMAIN = re.compile(r"(?:@|www\.\s?)([a-z][a-z0-9-]*\.[a-z]{2,}(?:\.[a-z]{2,})?)")
 
@@ -53,6 +58,7 @@ def cleanup_ocr(text: str) -> str:
     cleaned = cleaned.translate(_QUOTES)
     cleaned = re.sub(r"[ \t]+", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    cleaned = _LEADER.sub(" ... ", cleaned)
     cleaned = "\n".join(_tidy_line(line) for line in cleaned.split("\n"))
     cleaned = _RUN.sub(_fix_run, cleaned)
     cleaned = _BROKEN_ID.sub(_join_id, cleaned)
@@ -76,8 +82,12 @@ def _tidy_line(line: str) -> str:
 
 def _fix_words(text: str) -> str:
     text = re.sub(r"\b([Ss]p\.)\s?[zZ]\s?[0oO]\.\s?[0oO]\.", r"\1 z o.o.", text)
-    text = re.sub(r"\b([Ss]p\.)\s?([kKjJpP])\.(?=\s|$|,)", lambda m: f"{m.group(1)} {m.group(2).lower()}.", text)
+    text = re.sub(r"\b([Ss]p\.\s?)([KJP])\.(?=\s|$|,)", lambda m: f"{m.group(1)}{m.group(2).lower()}.", text)
     text = re.sub(r"(?<=\w) 6 (?=Partner|Wsp[óo]lni|Syn|Co\b)", " & ", text)
+    # Reference codes are upper case: "Dl.579.2026" is "DI.579.2026".
+    text = re.sub(r"\b([A-Z]+)l([A-Z]*\.\d)", r"\1I\2", text)
+    text = re.sub(r"€(?=[A-Z]{2}\d)", "C", text)
+    text = re.sub(r"(?<=\b[A-Z]{3})\.(?=[a-ząćęłńóśźż]{1,2}\s)", " ", text)
     text = re.sub(r"(?<=[a-ząćęłńóśźż])- (?=[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż])", "-", text)
     return text
 
