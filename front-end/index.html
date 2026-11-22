@@ -66,8 +66,8 @@
 
       <section id="bielik-settings" class="bielik-settings card" aria-labelledby="bielik-key-label" hidden>
         <div class="bielik-settings-head">
-          <h2 id="bielik-key-label" data-i18n="bielikKeyTitle">Klucz API do Bielika</h2>
-          <p data-i18n="bielikKeyHint">Klucz zostaje w tej przeglądarce i jest wysyłany tylko z Twoimi żądaniami. Serwer go nie zapisuje.</p>
+          <h2 id="bielik-key-label" data-i18n="bielikKeyTitle">Klucz API Mistral</h2>
+          <p data-i18n="bielikKeyHint">Klucz jest tylko w pamięci tej karty i trafia wyłącznie do lokalnego serwera PrzetarGO. Nie jest nigdzie zapisywany.</p>
         </div>
         <div class="key-row">
           <input
@@ -76,24 +76,20 @@
             type="password"
             autocomplete="off"
             spellcheck="false"
-            placeholder="hf_…"
+            placeholder="MISTRAL_API_KEY"
             data-i18n-aria="bielikKeyTitle"
           />
-          <button type="button" id="bielik-check" class="btn btn-ghost" data-i18n="bielikCheck">Sprawdź klucz</button>
+          <button type="button" id="bielik-check" class="btn btn-ghost" data-i18n="bielikCheck">Sprawdź połączenie</button>
         </div>
-        <label class="remember">
-          <input id="bielik-remember" type="checkbox" />
-          <span data-i18n="bielikRemember">Zapamiętaj na tym urządzeniu</span>
-        </label>
         <details class="bielik-advanced">
           <summary data-i18n="bielikAdvanced">Ustawienia zaawansowane</summary>
           <label class="field">
             <span data-i18n="bielikBaseUrl">Adres API (zgodny z OpenAI)</span>
-            <input id="bielik-base-url" class="text-input" type="url" spellcheck="false" placeholder="https://router.huggingface.co/v1" />
+            <input id="bielik-base-url" class="text-input" type="url" spellcheck="false" placeholder="https://api.scaleway.ai/v1" />
           </label>
           <label class="field">
             <span data-i18n="bielikModel">Model</span>
-            <input id="bielik-model" class="text-input" type="text" spellcheck="false" placeholder="speakleash/Bielik-11B-v3.0-Instruct" />
+            <input id="bielik-model" class="text-input" type="text" spellcheck="false" placeholder="mistral-small-3.2-24b-instruct-2506" />
           </label>
         </details>
         <p id="bielik-status" class="key-status" role="status"></p>
@@ -104,6 +100,7 @@
           <header class="card-head">
             <h2 data-i18n="documents">Dokumenty</h2>
           </header>
+          <p id="ocr-warning" class="key-status is-bad" data-i18n="ocrMissing" hidden></p>
           <section id="sample-picker" class="sample-picker" aria-labelledby="sample-label" hidden>
             <h3 id="sample-label" data-i18n="sampleTitle">Wypróbuj przykładową sprawę</h3>
             <div class="key-row">

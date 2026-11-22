@@ -257,14 +257,6 @@ a {
   outline-offset: 1px;
 }
 
-.remember {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  font-size: 14px;
-}
-
 .bielik-advanced {
   margin-top: 10px;
   font-size: 14px;
@@ -706,6 +698,7 @@ th {
 }
 
 .pill-unrecognized,
+.pill-needs_ocr,
 .pill-error {
   background: #fde8e6;
   color: var(--red);

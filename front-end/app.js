@@ -11,7 +11,6 @@ const modeButtons = document.querySelectorAll("[data-mode]");
 const langButtons = document.querySelectorAll("[data-lang]");
 const bielikSettings = document.querySelector("#bielik-settings");
 const bielikKey = document.querySelector("#bielik-key");
-const bielikRemember = document.querySelector("#bielik-remember");
 const bielikBaseUrl = document.querySelector("#bielik-base-url");
 const bielikModel = document.querySelector("#bielik-model");
 const bielikStatus = document.querySelector("#bielik-status");
@@ -20,8 +19,8 @@ const samplePicker = document.querySelector("#sample-picker");
 const sampleSelect = document.querySelector("#sample-select");
 const sampleLoad = document.querySelector("#sample-load");
 const inputFolder = document.querySelector("#input-folder");
+const ocrWarning = document.querySelector("#ocr-warning");
 const MAX_PDFS = 30;
-const LLM_STORAGE_KEY = "przetargo-bielik";
 
 const copy = {
   pl: {
@@ -62,7 +61,7 @@ const copy = {
     colStatus: "Status",
     noCases: "Brak spraw.",
     processingNow: "Przetwarzanie…",
-    apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom back-end2/start.sh.",
+    apiError: "Ekstraktor nie odpowiada. Odśwież tę stronę. Jeśli błąd zostaje, uruchom ponownie ./start.sh (w Windows start.bat).",
     emptyFiles: "Ten plik ma 0 bajtów w oknie wyboru, więc nie ma w nim treści PDF. Wybierz PDF, przy którym widać rozmiar.",
     tooMany: "Można dodać najwyżej 30 plików PDF.",
     uncertain: "Niepewne",
@@ -90,7 +89,7 @@ const copy = {
       przelew: "Potwierdzenie przelewu",
       unknown: "Nierozpoznany dokument",
     },
-    statuses: { ok: "Przetworzono", unrecognized: "Nierozpoznany", error: "Błąd" },
+    statuses: { ok: "Przetworzono", unrecognized: "Nierozpoznany", needs_ocr: "Wymaga OCR", error: "Błąd" },
     remove: "Usuń",
     pdfOnly: "Można dodać tylko pliki PDF. Pominięto: {names}",
     already: "Te pliki PDF są już dodane.",
@@ -98,18 +97,20 @@ const copy = {
     footer: "Hacknation 2026 projekt dla Urzędu Zamówień Publicznych",
     modeName: { regular: "przetwarzanie regularne", bielik: "Mistral", bielik_only: "Tylko Mistral" },
     apiErrorHosted: "Ekstraktor nie odpowiada. Odśwież stronę i spróbuj ponownie.",
-    bielikKeyTitle: "Klucz API do Bielika",
-    bielikKeyHint: "Klucz zostaje w tej przeglądarce i jest wysyłany tylko z Twoimi żądaniami. Serwer go nie zapisuje.",
-    bielikCheck: "Sprawdź klucz",
-    bielikRemember: "Zapamiętaj na tym urządzeniu",
+    bielikKeyTitle: "Klucz API Mistral",
+    bielikKeyHint: "Klucz jest tylko w pamięci tej karty i trafia wyłącznie do lokalnego serwera PrzetarGO. Nie jest nigdzie zapisywany.",
+    bielikCheck: "Sprawdź połączenie",
     bielikAdvanced: "Ustawienia zaawansowane",
     bielikBaseUrl: "Adres API (zgodny z OpenAI)",
     bielikModel: "Model",
-    bielikChecking: "Sprawdzanie klucza…",
-    bielikOk: "Klucz działa.",
-    bielikServerKey: "Ten serwer ma własny klucz. Możesz podać swój albo zostawić pole puste.",
-    bielikKeyMissing: "Wpisz klucz API do Bielika albo wybierz tryb Regularne.",
-    bielikKeyRejected: "Bielik odrzucił klucz API albo model. Sprawdź klucz i spróbuj ponownie.",
+    bielikChecking: "Sprawdzanie połączenia…",
+    bielikOk: "Połączono z modelem {model}.",
+    bielikServerKey: "Serwer ma ustawiony MISTRAL_API_KEY. Zostaw pole puste, aby go użyć.",
+    bielikKeyMissing: "Wpisz klucz API Mistral albo wybierz tryb Regularne.",
+    bielikKeyRejected: "API odrzuciło klucz albo model. Sprawdź klucz i spróbuj ponownie.",
+    llmFailures: "nieudane: {count}",
+    ocrMissing: "Tesseract OCR nie jest zainstalowany, więc skany nie zostaną odczytane. PDF-y z tekstem działają. Uruchom: python doctor.py",
+    needsOcr: "To skan bez warstwy tekstowej i nie udało się go odczytać przez OCR. Wynik jest pusty, a nie zgadywany.",
     sampleTitle: "Wypróbuj przykładową sprawę",
     sampleLoad: "Dodaj pliki",
     sampleText: "Sprawa {id} · PDF z tekstem",
@@ -154,7 +155,7 @@ const copy = {
     colStatus: "Status",
     noCases: "No cases yet.",
     processingNow: "Processing…",
-    apiError: "The extractor did not respond. Refresh this page. If it still fails, run back-end2/start.sh.",
+    apiError: "The extractor did not respond. Refresh this page. If it still fails, run ./start.sh again (start.bat on Windows).",
     emptyFiles: "That file is 0 bytes in the file window, so it has no PDF content. Choose a PDF that shows a size.",
     tooMany: "You can add up to 30 PDFs.",
     uncertain: "Uncertain",
@@ -182,7 +183,7 @@ const copy = {
       przelew: "Transfer confirmation",
       unknown: "Unrecognized document",
     },
-    statuses: { ok: "Processed", unrecognized: "Unrecognized", error: "Error" },
+    statuses: { ok: "Processed", unrecognized: "Unrecognized", needs_ocr: "Needs OCR", error: "Error" },
     remove: "Remove",
     pdfOnly: "Only PDF files can be added. Skipped: {names}",
     already: "Those PDFs are already attached.",
@@ -190,18 +191,20 @@ const copy = {
     footer: "HackNation 2026 project for the Public Procurement Office",
     modeName: { regular: "regular processing", bielik: "Mistral", bielik_only: "Mistral only" },
     apiErrorHosted: "The extractor did not respond. Refresh the page and try again.",
-    bielikKeyTitle: "Bielik API key",
-    bielikKeyHint: "The key stays in this browser and is sent only with your own requests. The server does not store it.",
-    bielikCheck: "Check key",
-    bielikRemember: "Remember on this device",
+    bielikKeyTitle: "Mistral API key",
+    bielikKeyHint: "The key stays in this tab's memory and is sent only to your local PrzetarGO server. It is never saved.",
+    bielikCheck: "Check connection",
     bielikAdvanced: "Advanced settings",
     bielikBaseUrl: "API base URL (OpenAI-compatible)",
     bielikModel: "Model",
-    bielikChecking: "Checking the key…",
-    bielikOk: "The key works.",
-    bielikServerKey: "This server has its own key. You can enter yours or leave the field empty.",
-    bielikKeyMissing: "Enter a Bielik API key, or choose Regular mode.",
-    bielikKeyRejected: "Bielik rejected the API key or the model. Check the key and try again.",
+    bielikChecking: "Checking the connection…",
+    bielikOk: "Connected to {model}.",
+    bielikServerKey: "The server has MISTRAL_API_KEY set. Leave this empty to use it.",
+    bielikKeyMissing: "Enter a Mistral API key, or choose Regular mode.",
+    bielikKeyRejected: "The API rejected the key or the model. Check the key and try again.",
+    llmFailures: "failed: {count}",
+    ocrMissing: "Tesseract OCR is not installed, so scans cannot be read. Text PDFs still work. Run: python doctor.py",
+    needsOcr: "This is a scan with no text layer and OCR could not read it. The result is empty, not guessed.",
     sampleTitle: "Try an example case",
     sampleLoad: "Add files",
     sampleText: "Case {id} · text PDFs",
@@ -223,19 +226,17 @@ const state = {
   serverKey: false,
   samples: [],
   keyStatus: null,
+  keyModel: "",
 };
 
 let inputCatalog = [];
 
-loadLlmSettings();
 [bielikKey, bielikBaseUrl, bielikModel].forEach((field) => {
   field.addEventListener("input", () => {
     state.keyStatus = null;
-    saveLlmSettings();
     renderKeyStatus();
   });
 });
-bielikRemember.addEventListener("change", saveLlmSettings);
 bielikCheck.addEventListener("click", checkKey);
 sampleLoad.addEventListener("click", loadSample);
 
@@ -391,40 +392,6 @@ function apiBase() {
   return "";
 }
 
-function loadLlmSettings() {
-  let saved = null;
-  try {
-    saved = sessionStorage.getItem(LLM_STORAGE_KEY) || localStorage.getItem(LLM_STORAGE_KEY);
-    bielikRemember.checked = Boolean(localStorage.getItem(LLM_STORAGE_KEY));
-  } catch {
-    saved = null;
-  }
-  if (!saved) return;
-  try {
-    const parsed = JSON.parse(saved);
-    bielikKey.value = parsed.key || "";
-    bielikBaseUrl.value = parsed.baseUrl || "";
-    bielikModel.value = parsed.model || "";
-  } catch {
-    // A damaged entry is ignored; the visitor types the key again.
-  }
-}
-
-function saveLlmSettings() {
-  const value = JSON.stringify({
-    key: bielikKey.value.trim(),
-    baseUrl: bielikBaseUrl.value.trim(),
-    model: bielikModel.value.trim(),
-  });
-  try {
-    sessionStorage.setItem(LLM_STORAGE_KEY, value);
-    if (bielikRemember.checked) localStorage.setItem(LLM_STORAGE_KEY, value);
-    else localStorage.removeItem(LLM_STORAGE_KEY);
-  } catch {
-    // The key still works for this page view when storage is blocked.
-  }
-}
-
 function llmHeaders() {
   const headers = {};
   if (bielikKey.value.trim()) headers["X-LLM-Key"] = bielikKey.value.trim();
@@ -439,7 +406,7 @@ function renderKeyStatus() {
     bielikStatus.textContent = t("bielikChecking");
   } else if (state.keyStatus === "ok") {
     bielikStatus.classList.add("is-ok");
-    bielikStatus.textContent = t("bielikOk");
+    bielikStatus.textContent = t("bielikOk").replace("{model}", state.keyModel || "Mistral");
   } else if (state.keyStatus && state.keyStatus.error) {
     bielikStatus.classList.add("is-bad");
     bielikStatus.textContent = state.keyStatus.error;
@@ -457,6 +424,7 @@ async function checkKey() {
     const response = await fetch(`${apiBase()}/api/llm/check`, { method: "POST", headers: llmHeaders() });
     const body = await response.json();
     if (!response.ok) throw new Error(body.detail || String(response.status));
+    state.keyModel = body.model || "";
     state.keyStatus = body.ok ? "ok" : { error: body.error || t("bielikKeyMissing") };
   } catch (error) {
     state.keyStatus = { error: error.message || apiErrorText() };
@@ -475,6 +443,7 @@ async function loadServerInfo() {
     const body = await response.json();
     state.hosted = Boolean(body.hosted);
     state.serverKey = Boolean(body.server_key);
+    ocrWarning.hidden = body.ocr !== false;
   } catch {
     state.hosted = false;
   }
@@ -764,8 +733,8 @@ async function ensureOk(response) {
     detail = "";
   }
   const error = new Error(String(response.status));
-  if (detail === "bielik_key_missing") error.notice = { key: "bielikKeyMissing" };
-  else if (detail === "bielik_key_rejected") error.notice = { key: "bielikKeyRejected" };
+  if (detail === "llm_key_missing") error.notice = { key: "bielikKeyMissing" };
+  else if (detail === "llm_key_rejected") error.notice = { key: "bielikKeyRejected" };
   else if (typeof detail === "string" && detail) error.notice = { text: detail };
   throw error;
 }
@@ -808,7 +777,9 @@ function renderOutputs() {
       const completion = Number(usage.completion_tokens) || 0;
       const calls = Number(usage.calls) || 0;
       const label = latest.servedMode === "bielik_only" ? t("modeBielikOnly") : t("bielikUsed");
-      note.textContent = `${label} · ${t("tokens")} ${prompt + completion} (${t("promptTokens")} ${prompt}, ${t("completionTokens")} ${completion}) · ${t("llmCalls")} ${calls}`;
+      const failures = Number(usage.failures) || 0;
+      const failed = failures ? ` (${t("llmFailures").replace("{count}", failures)})` : "";
+      note.textContent = `${label} · ${t("tokens")} ${prompt + completion} (${t("promptTokens")} ${prompt}, ${t("completionTokens")} ${completion}) · ${t("llmCalls")} ${calls}${failed}`;
       summary.append(note);
     } else if (latest.mode === "bielik" || latest.mode === "bielik_only") {
       note.className = "placeholder";
@@ -922,13 +893,18 @@ function renderResult(item) {
   heading.textContent = `${item.filename}${sizeLabel} — ${typeLabel(item.document_type)}`;
   const badge = ocrBadge(item);
   if (badge) heading.append(badge);
-  if (item.status === "unrecognized" || item.status === "error") heading.append(uncertainMark());
+  if (item.status !== "ok") heading.append(uncertainMark());
   article.append(heading);
 
   if (item.status === "unrecognized") {
     const note = document.createElement("p");
     note.className = "placeholder";
     note.textContent = t("unrecognized");
+    article.append(note);
+  } else if (item.status === "needs_ocr") {
+    const note = document.createElement("p");
+    note.className = "message";
+    note.textContent = t("needsOcr");
     article.append(note);
   } else if (item.status === "error") {
     const note = document.createElement("p");
