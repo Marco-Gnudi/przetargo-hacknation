@@ -46,7 +46,7 @@ The classifier is scored on `dane/`, including `negatywne/` and the decoy PDFs. 
 
 ## UI
 
-From the repo root, `start_ui.bat` starts the API on http://127.0.0.1:8000 and the front-end on http://127.0.0.1:8080.
+From the repo root, `start_ui.bat` starts the app at http://localhost:8000.
 
 `POST /api/process` takes PDF files and `mode` (`regular` or `bielik`). `regular` uses rules only. `bielik` keeps the rules for classification and for przelew, and asks Bielik for `odwolanie` and `pelnomocnictwo` (and for a przelew field or a type the rules leave empty). `GET /api/health` returns `{"status": "ok"}`.
 

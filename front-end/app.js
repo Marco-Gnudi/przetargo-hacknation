@@ -310,9 +310,7 @@ function selectMode(mode) {
 }
 
 function apiBase() {
-  const here = location.hostname === "127.0.0.1" || location.hostname === "localhost";
-  if (here && location.port === "8000") return "";
-  return "http://127.0.0.1:8000";
+  return "";
 }
 
 async function addFiles(fileListLike) {

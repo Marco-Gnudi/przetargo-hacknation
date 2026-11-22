@@ -7,7 +7,6 @@ if not exist "back-end2\.venv\Scripts\python.exe" (
   exit /b 1
 )
 start "PrzetarGO" /D "%~dp0back-end2" cmd /k ".venv\Scripts\python.exe api.py"
-start "PrzetarGO UI" /D "%~dp0front-end" cmd /k "python -m http.server 8080 --bind 127.0.0.1"
-echo API  http://127.0.0.1:8000/api/health
-echo UI   http://127.0.0.1:8080/
-echo UI   http://127.0.0.1:8000/
+echo App  http://localhost:8000/
+ping -n 3 127.0.0.1 >nul
+start "" http://localhost:8000/
