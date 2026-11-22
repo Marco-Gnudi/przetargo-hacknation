@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PrzetarGO</title>
-    <link rel="stylesheet" href="styles.css?v=18" />
+    <link rel="stylesheet" href="styles.css?v=21" />
   </head>
   <body>
     <header class="site-header">
@@ -13,6 +13,11 @@
           <img class="logo" src="assets/przetargo.png" alt="PrzetarGO" />
           <small data-i18n="tagline">Odwołania KIO jako ustrukturyzowane dane</small>
         </a>
+        <div class="header-tools">
+        <div class="view-switch" role="tablist">
+          <button type="button" id="view-extract" role="tab" aria-selected="true" data-i18n="viewExtract">Ekstrakcja</button>
+          <button type="button" id="view-stats" role="tab" aria-selected="false" data-i18n="viewStats">Statystyki</button>
+        </div>
         <div class="lang-switch" role="group" data-i18n-aria="language">
           <button type="button" data-lang="pl" aria-pressed="true" aria-label="Polski">
             <svg viewBox="0 0 16 12" width="18" height="14" aria-hidden="true">
@@ -35,10 +40,12 @@
             EN
           </button>
         </div>
+        </div>
       </div>
     </header>
 
     <main class="page">
+      <div id="extract-view">
       <section class="intro">
         <h1 data-i18n="heroTitle">Konwertuj pliki PDF na JSON-y</h1>
       </section>
@@ -149,10 +156,30 @@
           </table>
         </div>
       </section>
+      </div>
+
+      <section id="stats-view" class="stats-view" hidden>
+        <p id="stats-error" class="message" role="status" hidden></p>
+        <div class="stats-headline">
+          <p id="stats-f1" class="stats-f1"></p>
+          <span class="stats-rule" aria-hidden="true"></span>
+          <p class="stats-kicker" data-i18n="statsF1Label">F1 (całość)</p>
+          <p id="stats-detail" class="stats-detail"></p>
+        </div>
+        <div id="stats-cards" class="stats-cards"></div>
+        <figure class="stats-chart">
+          <img src="/api/charts/f1_overview.png" alt="" data-i18n-alt="statsChartOverview" />
+          <figcaption data-i18n="statsChartOverview">F1 według rodzaju dokumentu</figcaption>
+        </figure>
+        <figure id="chart-flow" class="stats-chart" hidden>
+          <img src="/api/charts/pipeline_flow.png" alt="" data-i18n-alt="statsChartFlow" />
+          <figcaption data-i18n="statsChartFlow">Przepływ przetwarzania</figcaption>
+        </figure>
+      </section>
     </main>
     <footer class="site-footer">
       <p data-i18n="footer">Hacknation 2026 projekt dla Urzędu Zamówień Publicznych</p>
     </footer>
-    <script src="app.js?v=19"></script>
+    <script src="app.js?v=20"></script>
   </body>
 </html>

@@ -83,6 +83,19 @@ const copy = {
     pdfOnly: "Można dodać tylko pliki PDF. Pominięto: {names}",
     already: "Te pliki PDF są już dodane.",
     pending: "Jeszcze nieprzetworzone",
+    viewExtract: "Ekstrakcja",
+    viewStats: "Statystyki",
+    statsF1Label: "F1 (całość)",
+    statsPrecision: "precyzja",
+    statsRecall: "czułość",
+    statsMissing: "Brak pliku ze statystykami. Uruchom ewaluację, aby go utworzyć.",
+    statsChartOverview: "F1 według rodzaju dokumentu",
+    statsChartFlow: "Przepływ przetwarzania",
+    statsTypes: {
+      odwolanie: "Odwołanie",
+      pelnomocnictwo: "Pełnomocnictwo",
+      przelew: "Przelew",
+    },
     footer: "Hacknation 2026 projekt dla Urzędu Zamówień Publicznych",
     modeName: { regular: "przetwarzanie regularne", bielik: "Mistral", bielik_only: "Tylko Mistral" },
   },
@@ -157,6 +170,19 @@ const copy = {
     pdfOnly: "Only PDF files can be added. Skipped: {names}",
     already: "Those PDFs are already attached.",
     pending: "Not processed yet",
+    viewExtract: "Extraction",
+    viewStats: "Statistics",
+    statsF1Label: "F1 (overall)",
+    statsPrecision: "precision",
+    statsRecall: "recall",
+    statsMissing: "The statistics file is missing. Run an evaluation to create it.",
+    statsChartOverview: "F1 by document type",
+    statsChartFlow: "Processing flow",
+    statsTypes: {
+      odwolanie: "Appeal",
+      pelnomocnictwo: "Power of attorney",
+      przelew: "Transfer",
+    },
     footer: "HackNation 2026 project for the Public Procurement Office",
     modeName: { regular: "regular processing", bielik: "Mistral", bielik_only: "Mistral only" },
   },
@@ -278,6 +304,10 @@ function applyCopy() {
   document.querySelectorAll("[data-i18n-aria]").forEach((el) => {
     el.setAttribute("aria-label", t(el.dataset.i18nAria));
   });
+  document.querySelectorAll("[data-i18n-alt]").forEach((el) => {
+    el.alt = t(el.dataset.i18nAlt);
+  });
+  renderStats();
   langButtons.forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.lang === state.lang));
   });
@@ -311,6 +341,77 @@ function selectMode(mode) {
 
 function apiBase() {
   return "";
+}
+
+const STAT_TYPES = ["odwolanie", "pelnomocnictwo", "przelew"];
+let statsPayload = null;
+
+document.querySelector("#view-extract").addEventListener("click", () => showView("extract"));
+document.querySelector("#view-stats").addEventListener("click", () => showView("stats"));
+document.querySelector("#chart-flow img").addEventListener("load", (event) => {
+  event.currentTarget.parentElement.hidden = false;
+});
+document.querySelector("#chart-flow img").addEventListener("error", (event) => {
+  event.currentTarget.parentElement.hidden = true;
+});
+
+function showView(name) {
+  const stats = name === "stats";
+  document.querySelector("#extract-view").hidden = stats;
+  document.querySelector("#stats-view").hidden = !stats;
+  document.querySelector("#view-extract").setAttribute("aria-selected", String(!stats));
+  document.querySelector("#view-stats").setAttribute("aria-selected", String(stats));
+  if (stats) loadStats();
+}
+
+async function loadStats() {
+  const error = document.querySelector("#stats-error");
+  if (!statsPayload) {
+    try {
+      const response = await fetch(`${apiBase()}/api/stats`);
+      if (!response.ok) throw new Error(await response.text());
+      statsPayload = await response.json();
+    } catch {
+      error.hidden = false;
+      error.textContent = t("statsMissing");
+      return;
+    }
+  }
+  error.hidden = true;
+  renderStats();
+}
+
+function renderStats() {
+  if (!statsPayload || document.querySelector("#stats-view").hidden) return;
+  const overall = statsPayload;
+  document.querySelector("#stats-f1").textContent = plNumber(overall.f1);
+  document.querySelector("#stats-detail").textContent =
+    `${t("statsPrecision")} ${plNumber(overall.precision)}  ·  ${t("statsRecall")} ${plNumber(overall.recall)}`;
+  const cards = document.querySelector("#stats-cards");
+  const types = overall.types || {};
+  cards.replaceChildren(...STAT_TYPES.filter((key) => types[key]).map((key) => statCard(key, types[key])));
+}
+
+function statCard(key, bucket) {
+  const card = document.createElement("article");
+  card.className = "stats-card";
+  const title = document.createElement("h2");
+  title.textContent = copy[state.lang].statsTypes[key];
+  const score = document.createElement("p");
+  score.className = "stats-card-f1";
+  score.textContent = plNumber(bucket.f1);
+  const detail = document.createElement("p");
+  detail.textContent =
+    `${t("statsPrecision")} ${plNumber(bucket.precision)}  ·  ${t("statsRecall")} ${plNumber(bucket.recall)}`;
+  const count = document.createElement("p");
+  count.className = "stats-n";
+  count.textContent = `n = ${bucket.documents}`;
+  card.append(title, score, detail, count);
+  return card;
+}
+
+function plNumber(value) {
+  return Number(value).toFixed(2).replace(".", ",");
 }
 
 async function addFiles(fileListLike) {
