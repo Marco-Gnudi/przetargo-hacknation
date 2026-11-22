@@ -77,8 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         },
         "modes": {},
     }
-    for mode in ("regular", "bielik"):
-        if mode == "bielik" and not key_ok:
+    for mode in ("regular", "mistral"):
+        if mode == "mistral" and not key_ok:
             continue
         print(f"measuring {len(pdfs)} PDFs  mode {mode}  cache off", flush=True)
         payload["modes"][mode] = _measure(evaluate, pdfs, mode)
@@ -348,7 +348,7 @@ def _draw(payload: dict) -> None:
     from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
     regular = (payload.get("modes") or {}).get("regular")
-    hybrid = (payload.get("modes") or {}).get("bielik")
+    hybrid = (payload.get("modes") or {}).get("mistral")
     source = (regular or hybrid or {}).get("text_source_percent") or {}
     types = (regular or hybrid or {}).get("type_percent") or {}
     rules = regular or {}

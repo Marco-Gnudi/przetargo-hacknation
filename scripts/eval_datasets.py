@@ -39,7 +39,7 @@ GROUPS = (
     ("synth_negative", "Skany syntetyczne, negatywne"),
 )
 
-MODE_LABELS = {"regular": "Reguły", "bielik": "Reguły + Mistral"}
+MODE_LABELS = {"regular": "Reguły", "mistral": "Reguły + Mistral"}
 _NEEDED = threading.local()
 
 
@@ -71,8 +71,8 @@ def main(argv: list[str] | None = None) -> int:
         "scoring": "field exact match, same totals as backend/scripts/evaluate.py",
         "modes": {},
     }
-    for mode in ("regular", "bielik"):
-        if mode == "bielik" and not key_ok:
+    for mode in ("regular", "mistral"):
+        if mode == "mistral" and not key_ok:
             continue
         print(f"scoring {len(jobs)} PDFs  mode {mode}  cache off", flush=True)
         payload["modes"][mode] = _run(evaluate, jobs, rules, mode)
@@ -259,7 +259,7 @@ def _draw(payload: dict) -> None:
     import matplotlib.pyplot as plt
 
     modes = payload.get("modes") or {}
-    series = [(key, MODE_LABELS[key], NAVY if key == "regular" else RED) for key in ("regular", "bielik") if key in modes]
+    series = [(key, MODE_LABELS[key], NAVY if key == "regular" else RED) for key in ("regular", "mistral") if key in modes]
     if not series:
         raise SystemExit("No modes in stats_datasets.json")
     present = []
