@@ -1,9 +1,10 @@
 """Turn the text PDFs in dane/ into degraded image-only scans for a held-out OCR test.
 
-The reference JSONs are copied next to each scan, so evaluate.py can score them:
+The reference JSONs are copied next to each scan, so evaluate.py can score them.
+The set this script produced is committed at test_data/synthetic_scans (184 scans).
 
     python backend/scripts/make_synthetic_scans.py --out /tmp/synth
-    python backend/scripts/evaluate.py --data /tmp/synth --mode regular
+    python backend/scripts/evaluate.py --data test_data/synthetic_scans --mode regular
 """
 
 from __future__ import annotations
