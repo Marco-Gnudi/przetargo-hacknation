@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     requested = args.mode.strip().lower()
     has_key = bool(llm_setting("LLM_API_KEY"))
     if requested == "auto":
-        mode = "bielik" if has_key else "regular"
+        mode = "mistral" if has_key else "regular"
     else:
         try:
             mode = normalise_mode(requested)
@@ -144,7 +144,7 @@ def _check_llm(client_class) -> str:
 
 
 def _mode_label(mode: str) -> str:
-    return {"regular": "deterministic", "bielik": "hybrid (rules + Mistral)", "bielik_only": "llm-only (Mistral)"}[mode]
+    return {"regular": "deterministic", "mistral": "hybrid (rules + Mistral)", "mistral_only": "llm-only (Mistral)"}[mode]
 
 
 def _summary(records: list[dict], elapsed: float, output: Path, log_path: Path, key_rejected: bool) -> None:

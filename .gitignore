@@ -24,7 +24,7 @@ local.properties
 /captures
 *.apk
 *.aab
-# Cached Bielik responses (prompt + text hash)
+# Cached Mistral responses (prompt + text hash)
 backend/.cache/
 # Documents and results stay on the machine that processes them
 /input/*

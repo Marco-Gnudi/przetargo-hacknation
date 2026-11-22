@@ -2,7 +2,7 @@
 
 Run from the repo:
     python backend/scripts/evaluate.py --mode regular
-    python backend/scripts/evaluate.py --mode bielik --cache on
+    python backend/scripts/evaluate.py --mode mistral --cache on
     python backend/scripts/evaluate.py --data UZP-hacknation-task/dane/skany --mode regular
 
 Ground truth is only an expected JSON that sits next to the PDF. A file with
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "back-end2"))
 sys.path.insert(1, str(ROOT / "backend"))
 
-from llm_fill import extract_bielik_only, fill_with_bielik  # noqa: E402
+from llm_fill import extract_mistral_only, fill_with_mistral  # noqa: E402
 from normalizers import account_number, amount, compact  # noqa: E402
 from pipeline import load_rules, process_pdf  # noqa: E402
 from odwolania.config import task_data_dir  # noqa: E402
@@ -49,7 +49,7 @@ _ID_LEAVES = {"na_rachunek", "z_rachunku", "nip", "krs", "regon", "pesel"}
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evaluate extraction against UZP JSON.")
     parser.add_argument("--data", type=Path, default=None, help="Folder of PDFs (default: dane/)")
-    parser.add_argument("--mode", choices=("regular", "bielik", "bielik_only"), required=True)
+    parser.add_argument("--mode", choices=("regular", "mistral", "mistral_only"), required=True)
     parser.add_argument("--cache", choices=("on", "off"), default="on")
     args = parser.parse_args(argv)
 
@@ -171,16 +171,16 @@ def _score_pdf(pdf: Path, mode: str, rules: dict) -> dict:
 
 
 def _predict(pdf: Path, mode: str, rules: dict) -> tuple[dict, str]:
-    if mode == "bielik_only":
+    if mode == "mistral_only":
         from pdf_reader import read_pdf
 
         document = read_pdf(pdf)
-        payload, _document_type, _sources, _raw = extract_bielik_only(pdf)
+        payload, _document_type, _sources, _raw = extract_mistral_only(pdf)
         return payload if isinstance(payload, dict) else {}, document.text_source
     payload, diagnostic = process_pdf(pdf, rules)
     source = diagnostic.get("text_source") or "text"
-    if mode == "bielik":
-        payload, _document_type, _sources, _bielik, _raw = fill_with_bielik(
+    if mode == "mistral":
+        payload, _document_type, _sources, _mistral, _raw = fill_with_mistral(
             pdf, payload, diagnostic["document_type"]
         )
     return payload if isinstance(payload, dict) else {}, source

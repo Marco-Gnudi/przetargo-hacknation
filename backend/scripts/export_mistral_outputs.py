@@ -1,11 +1,11 @@
-"""Write Bielik-only JSON for every training PDF.
+"""Write Mistral-only JSON for every training PDF.
 
 Run from backend/:
-    python scripts/export_bielik_outputs.py
-    python scripts/export_bielik_outputs.py --force
+    python scripts/export_mistral_outputs.py
+    python scripts/export_mistral_outputs.py --force
 
 Reads UZP-hacknation-task/dane/przyklad_*/ and negatywne/. Writes
-outputs_bielik/<case>/<expected-json-name>.json at the repo root.
+outputs_mistral/<case>/<expected-json-name>.json at the repo root.
 Saved model replies in backend/.cache/llm/ are reused. A file whose output
 already exists is skipped, so a second run makes no LLM calls. --force
 rewrites those files and still uses the cache.
@@ -36,7 +36,7 @@ _COLUMNS = ("case", "file", "detected type", "fields filled", "tokens used")
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    parser = argparse.ArgumentParser(description="Export Bielik-only JSON for manual review.")
+    parser = argparse.ArgumentParser(description="Export Mistral-only JSON for manual review.")
     parser.add_argument(
         "--force",
         action="store_true",
@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     dane = task_data_dir() / "dane"
-    out_root = REPO_ROOT / "outputs_bielik"
+    out_root = REPO_ROOT / "outputs_mistral"
     _refuse_task_dir(out_root)
     pdfs = _pdfs(dane)
     previous = _read_summary(out_root / "summary.csv")
@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
         set_llm_document(pdf.name)
         before = current_usage()
         try:
-            processed = process_file(pdf, mode="bielik_only")
+            processed = process_file(pdf, mode="mistral_only")
         except Exception as exc:
             print(f"{label} ERROR {type(exc).__name__}", flush=True)
             continue

@@ -203,7 +203,7 @@ def test_attorneys_nested_in_the_principal_are_lifted(tmp_path):
     ]
 
 
-def test_bielik_only_skips_the_transfer_rules(monkeypatch):
+def test_mistral_only_skips_the_transfer_rules(monkeypatch):
     def rules(*args, **kwargs):
         raise AssertionError("transfer rules should not run")
 
@@ -216,7 +216,7 @@ def test_bielik_only_skips_the_transfer_rules(monkeypatch):
 
     monkeypatch.setattr("odwolania.pipeline.extract_przelew", rules)
     monkeypatch.setattr("odwolania.pipeline.extract_llm", fake)
-    processed = process_file(_CASE / "potwierdzenie_przelewu.pdf", mode="bielik_only")
+    processed = process_file(_CASE / "potwierdzenie_przelewu.pdf", mode="mistral_only")
     assert processed.document_type == "przelew"
     assert processed.data == {"przelew_bankowy": {"kwota": 200.0}}
     assert processed.sources == {"przelew_bankowy.kwota": "llm"}
@@ -302,7 +302,7 @@ def test_regular_mode_does_not_call_the_llm_extractor(monkeypatch):
     assert processed.sources == {}
 
 
-def test_bielik_mode_and_cli_use_the_llm_extractor(monkeypatch):
+def test_mistral_mode_and_cli_use_the_llm_extractor(monkeypatch):
     def fake(doc_type, text, client=None, **kwargs):
         assert doc_type == "pelnomocnictwo"
         assert "PEŁNOMOCNICTWO" in text
@@ -312,7 +312,7 @@ def test_bielik_mode_and_cli_use_the_llm_extractor(monkeypatch):
         )
 
     monkeypatch.setattr("odwolania.pipeline.extract_llm", fake)
-    processed = process_file(_CASE / "pelnomocnictwo.pdf", mode="bielik")
+    processed = process_file(_CASE / "pelnomocnictwo.pdf", mode="mistral")
     assert processed.document_type == "pelnomocnictwo"
     assert processed.data == {"mocodawca": [], "pelnomocnicy": []}
     assert process_document(_CASE / "pelnomocnictwo.pdf") == processed.data

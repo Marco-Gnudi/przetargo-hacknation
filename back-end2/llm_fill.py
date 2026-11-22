@@ -1,4 +1,4 @@
-"""Fill nulls from the Bielik pipeline in backend/. Does not replace rule values."""
+"""Fill nulls from the Mistral pipeline in backend/. Does not replace rule values."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def merge_payload(
     incoming: dict,
     incoming_sources: dict[str, str] | None = None,
 ) -> tuple[dict, dict[str, str]]:
-    """Keep deterministic values. Copy Bielik only into null or missing fields."""
+    """Keep deterministic values. Copy Mistral only into null or missing fields."""
     result = copy.deepcopy(base) if isinstance(base, dict) else {}
     sources: dict[str, str] = {}
     _tag(result, sources, "rule", "")
@@ -30,11 +30,11 @@ def tag_rules(payload: dict) -> dict[str, str]:
     return sources
 
 
-def extract_bielik_only(pdf_path: Path) -> tuple[dict, str, dict[str, str], dict]:
-    """Classify, then fill every field from Bielik. Rules do not extract values."""
+def extract_mistral_only(pdf_path: Path) -> tuple[dict, str, dict[str, str], dict]:
+    """Classify, then fill every field from Mistral. Rules do not extract values."""
     from odwolania.pipeline import process_file
 
-    processed = process_file(Path(pdf_path), mode="bielik_only")
+    processed = process_file(Path(pdf_path), mode="mistral_only")
     if not processed.document_type:
         return {}, "unknown", {}, {}
     raw = processed.raw if processed.raw is not None else processed.data
@@ -42,18 +42,18 @@ def extract_bielik_only(pdf_path: Path) -> tuple[dict, str, dict[str, str], dict
     return data, processed.document_type, processed.sources, raw
 
 
-def fill_with_bielik(
+def fill_with_mistral(
     pdf_path: Path, payload: dict, document_type: str
 ) -> tuple[dict, str, dict[str, str], dict, dict]:
-    """Run backend.odwolania in bielik mode and fill only what rules left empty.
+    """Run backend.odwolania in mistral mode and fill only what rules left empty.
 
     The last two values are the model's field values and the unnormalised JSON.
     """
     from odwolania.pipeline import process_file
 
     known = document_type if document_type != "unknown" else None
-    processed = process_file(Path(pdf_path), mode="bielik", document_type=known)
-    bielik = _llm_leaves(processed.data, processed.sources)
+    processed = process_file(Path(pdf_path), mode="mistral", document_type=known)
+    mistral = _llm_leaves(processed.data, processed.sources)
     raw_model = processed.raw if processed.raw is not None else processed.data
     if document_type == "unknown":
         if not processed.document_type:
@@ -61,14 +61,14 @@ def fill_with_bielik(
         sources: dict[str, str] = {}
         _tag(processed.data, sources, "llm", "")
         data = _with_vision(pdf_path, processed.data, processed.document_type)
-        return data, processed.document_type, sources, bielik, raw_model
+        return data, processed.document_type, sources, mistral, raw_model
     if processed.document_type != document_type:
         kept = _with_vision(pdf_path, payload, document_type)
         return kept, document_type, tag_rules(kept), {}, payload
     merged, sources = merge_payload(payload, processed.data, processed.sources)
     raw_merged, _ = merge_payload(payload, raw_model, processed.sources)
     merged = _with_vision(pdf_path, merged, document_type)
-    return merged, document_type, sources, bielik, raw_merged
+    return merged, document_type, sources, mistral, raw_merged
 
 
 def _with_vision(pdf_path, payload: dict, document_type: str) -> dict:
@@ -77,20 +77,20 @@ def _with_vision(pdf_path, payload: dict, document_type: str) -> dict:
     return apply_vision(pdf_path, payload, document_type)
 
 
-def review_marks(final: dict, sources: dict[str, str], bielik: dict[str, object]) -> dict[str, dict]:
+def review_marks(final: dict, sources: dict[str, str], mistral: dict[str, object]) -> dict[str, dict]:
     """Display-only comparison. The stored value stays the one in `final`."""
     marks: dict[str, dict] = {}
     for path, value in _leaves(final).items():
         origin = _origin(path, sources)
-        other = bielik.get(path)
+        other = mistral.get(path)
         if origin == "llm":
-            marks[path] = {"mark": "llm", "bielik": value}
-        elif path not in bielik or other in (None, ""):
-            marks[path] = {"mark": "rule", "bielik": None}
+            marks[path] = {"mark": "llm", "mistral": value}
+        elif path not in mistral or other in (None, ""):
+            marks[path] = {"mark": "rule", "mistral": None}
         elif _same(value, other):
-            marks[path] = {"mark": "agree", "bielik": other}
+            marks[path] = {"mark": "agree", "mistral": other}
         else:
-            marks[path] = {"mark": "diff", "bielik": other}
+            marks[path] = {"mark": "diff", "mistral": other}
     return marks
 
 

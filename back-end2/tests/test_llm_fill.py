@@ -22,19 +22,19 @@ class MergeTests(unittest.TestCase):
 
 
 class ReviewMarkTests(unittest.TestCase):
-    def test_badges_compare_rules_with_bielik_without_changing_the_value(self):
+    def test_badges_compare_rules_with_mistral_without_changing_the_value(self):
         final = {"tytul": "opłata CEN1", "kwota": 200.0, "miasto": "Rzeszów"}
         sources = {"tytul": "rule", "kwota": "llm", "miasto": "rule"}
-        bielik = {"tytul": "opłata CEN1", "miasto": "Łódź"}
-        marks = review_marks(final, sources, bielik)
+        mistral = {"tytul": "opłata CEN1", "miasto": "Łódź"}
+        marks = review_marks(final, sources, mistral)
         self.assertEqual(marks["tytul"]["mark"], "agree")
         self.assertEqual(marks["kwota"]["mark"], "llm")
-        self.assertEqual(marks["miasto"], {"mark": "diff", "bielik": "Łódź"})
+        self.assertEqual(marks["miasto"], {"mark": "diff", "mistral": "Łódź"})
         self.assertEqual(final["miasto"], "Rzeszów")
 
-    def test_rules_stay_plain_when_bielik_returned_nothing(self):
+    def test_rules_stay_plain_when_mistral_returned_nothing(self):
         marks = review_marks({"tytul": "opłata"}, {"tytul": "rule"}, {})
-        self.assertEqual(marks["tytul"], {"mark": "rule", "bielik": None})
+        self.assertEqual(marks["tytul"], {"mark": "rule", "mistral": None})
 
 
 if __name__ == "__main__":

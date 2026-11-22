@@ -42,13 +42,13 @@ Reads `przyklad_01/potwierdzenie_przelewu.pdf`, asks for the przelew fields, and
 .venv\Scripts\python.exe scripts\eval_llm.py
 ```
 
-The classifier is scored on `dane/`, including `negatywne/` and the decoy PDFs. The przelew eval compares all 60 cases with the expected `przelew.json` and reports whether each field came from a rule or the model. `eval_llm.py` scores `odwolanie` and `pelnomocnictwo` in Mistral mode (`--type` limits the type, `--limit N` the first N cases; the mode value in code is still `bielik`). Model replies are stored in `backend/.cache/`, which is gitignored, so a rerun with the same prompt does not call Mistral again.
+The classifier is scored on `dane/`, including `negatywne/` and the decoy PDFs. The przelew eval compares all 60 cases with the expected `przelew.json` and reports whether each field came from a rule or the model. `eval_llm.py` scores `odwolanie` and `pelnomocnictwo` in Mistral mode (`--type` limits the type, `--limit N` the first N cases). Model replies are stored in `backend/.cache/`, which is gitignored, so a rerun with the same prompt does not call Mistral again.
 
 ## UI
 
 From the repo root, `start_ui.bat` starts the app at http://localhost:8000.
 
-`POST /api/process` takes PDF files and `mode` (`regular` or `bielik`). `regular` uses rules only. `bielik` is the Mistral mode: it keeps the rules for classification and for przelew, and asks Mistral for `odwolanie` and `pelnomocnictwo` (and for a przelew field or a type the rules leave empty). `GET /api/health` returns `{"status": "ok"}`.
+`POST /api/process` takes PDF files and `mode` (`regular` or `mistral`). `regular` uses rules only. `mistral` keeps the rules for classification and for przelew, and asks Mistral for `odwolanie` and `pelnomocnictwo` (and for a przelew field or a type the rules leave empty). `GET /api/health` returns `{"status": "ok"}`.
 
 ## Tests
 

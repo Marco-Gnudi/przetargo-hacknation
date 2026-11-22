@@ -27,11 +27,11 @@ class HostedApiTests(unittest.TestCase):
         response = self.client.post("/api/extract/input", json={"cases": ["case1"]})
         self.assertEqual(response.status_code, 404)
 
-    def test_bielik_mode_without_a_key_is_refused(self):
+    def test_mistral_mode_without_a_key_is_refused(self):
         with SAMPLE.open("rb") as handle:
             response = self.client.post(
                 "/api/extract/batch",
-                data={"mode": "bielik"},
+                data={"mode": "mistral"},
                 files={"files": (SAMPLE.name, handle, "application/pdf")},
             )
         self.assertEqual(response.status_code, 400)

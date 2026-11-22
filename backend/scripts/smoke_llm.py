@@ -1,4 +1,4 @@
-"""Send one transfer PDF to Bielik and print the JSON beside the expected file.
+"""Send one transfer PDF to Mistral and print the JSON beside the expected file.
 
 Run from backend/:  python scripts/smoke_llm.py
 """

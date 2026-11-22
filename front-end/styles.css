@@ -310,12 +310,12 @@ a {
   background: var(--accent-soft);
 }
 
-.bielik-settings {
+.mistral-settings {
   margin: 0 0 20px;
   padding: 16px 18px;
 }
 
-.bielik-settings-head h2,
+.mistral-settings-head h2,
 .sample-picker h3 {
   margin: 0;
   font-size: 15px;
@@ -325,7 +325,7 @@ a {
   font-size: 14px;
 }
 
-.bielik-settings-head p {
+.mistral-settings-head p {
   margin: 2px 0 0;
   color: var(--muted);
   font-size: 14px;
@@ -358,17 +358,17 @@ a {
   outline-offset: 1px;
 }
 
-.bielik-advanced {
+.mistral-advanced {
   margin-top: 10px;
   font-size: 14px;
 }
 
-.bielik-advanced summary {
+.mistral-advanced summary {
   color: var(--accent);
   cursor: pointer;
 }
 
-.bielik-advanced .field {
+.mistral-advanced .field {
   display: grid;
   gap: 4px;
   margin-top: 10px;
@@ -831,7 +831,7 @@ a {
   margin-left: 12px;
 }
 
-.bielik-diff {
+.mistral-diff {
   color: var(--muted);
 }
 

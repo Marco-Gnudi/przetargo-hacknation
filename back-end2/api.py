@@ -247,7 +247,7 @@ def extract_batch(
     nocache_query: str = Query("", alias="nocache"),
 ):
     if mode not in MODES:
-        raise HTTPException(status_code=400, detail="mode must be regular, bielik, or bielik_only")
+        raise HTTPException(status_code=400, detail="mode must be regular, mistral, or mistral_only")
     from odwolania.llm import current_usage, set_skip_cache, start_usage
 
     _use_request_llm(request)
@@ -319,7 +319,7 @@ def extract_input_file(body: InputFileRequest, request: Request):
     """One PDF from input/ per request, so the page can show progress for any number of files."""
     _require_local()
     if body.mode not in MODES:
-        raise HTTPException(status_code=400, detail="mode must be regular, bielik, or bielik_only")
+        raise HTTPException(status_code=400, detail="mode must be regular, mistral, or mistral_only")
     folder = _case_dir(body.case)
     if folder is None or Path(body.file).name != body.file:
         raise HTTPException(status_code=404, detail="Unknown file.")
@@ -370,7 +370,7 @@ def delete_input():
 def extract_input(body: InputRequest, request: Request):
     _require_local()
     if body.mode not in MODES:
-        raise HTTPException(status_code=400, detail="mode must be regular, bielik, or bielik_only")
+        raise HTTPException(status_code=400, detail="mode must be regular, mistral, or mistral_only")
     from odwolania.llm import current_usage, set_skip_cache, start_usage
 
     _use_request_llm(request)

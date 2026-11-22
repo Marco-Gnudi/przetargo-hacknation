@@ -1,4 +1,4 @@
-"""Fill a document JSON from the Bielik prompt stored in document_types.yaml."""
+"""Fill a document JSON from the Mistral prompt stored in document_types.yaml."""
 
 from __future__ import annotations
 
